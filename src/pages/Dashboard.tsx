@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { 
   Users, 
   Briefcase, 
@@ -26,6 +27,8 @@ import {
   LineChart,
   Line
 } from 'recharts';
+import { collection, onSnapshot, query, limit, orderBy } from 'firebase/firestore';
+import { db } from '@/firebase';
 
 const caseData = [
   { name: 'Jan', resolved: 40, new: 64 },
@@ -44,14 +47,45 @@ const projectData = [
   { name: 'Security', budget: 1500000 },
 ];
 
-const recentCases = [
-  { id: 'CAS-001', title: 'Borehole repair needed', ward: 'Ward 1', status: 'Pending', priority: 'High', date: '2023-10-24' },
-  { id: 'CAS-002', title: 'School bursary application', ward: 'Ward 3', status: 'In Progress', priority: 'Medium', date: '2023-10-23' },
-  { id: 'CAS-003', title: 'Road maintenance request', ward: 'Ward 2', status: 'Resolved', priority: 'Low', date: '2023-10-22' },
-  { id: 'CAS-004', title: 'Medical assistance', ward: 'Ward 5', status: 'Pending', priority: 'High', date: '2023-10-21' },
-];
-
 export default function Dashboard() {
+  const [citizensCount, setCitizensCount] = useState(0);
+  const [activeCasesCount, setActiveCasesCount] = useState(0);
+  const [criticalCasesCount, setCriticalCasesCount] = useState(0);
+  const [recentCases, setRecentCases] = useState<any[]>([]);
+
+  useEffect(() => {
+    // Listen to citizens
+    const unsubCitizens = onSnapshot(collection(db, 'citizens'), (snapshot) => {
+      setCitizensCount(snapshot.size);
+    });
+
+    // Listen to cases
+    const unsubCases = onSnapshot(collection(db, 'cases'), (snapshot) => {
+      let active = 0;
+      let critical = 0;
+      const cases: any[] = [];
+      
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.status !== 'Resolved') active++;
+        if (data.priority === 'High' && data.status !== 'Resolved') critical++;
+        cases.push({ id: doc.id, ...data });
+      });
+      
+      setActiveCasesCount(active);
+      setCriticalCasesCount(critical);
+      
+      // Sort by date descending and take top 5
+      cases.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setRecentCases(cases.slice(0, 5));
+    });
+
+    return () => {
+      unsubCitizens();
+      unsubCases();
+    };
+  }, []);
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -73,7 +107,7 @@ export default function Dashboard() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">45,231</div>
+            <div className="text-2xl font-bold">{citizensCount.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
               <span className="text-emerald-500 inline-flex items-center">
                 <TrendingUp className="mr-1 h-3 w-3" /> +2.5%
@@ -88,7 +122,7 @@ export default function Dashboard() {
             <Briefcase className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">128</div>
+            <div className="text-2xl font-bold">{activeCasesCount}</div>
             <p className="text-xs text-muted-foreground">
               <span className="text-rose-500 inline-flex items-center">
                 <TrendingUp className="mr-1 h-3 w-3" /> +12
@@ -115,7 +149,7 @@ export default function Dashboard() {
             <AlertTriangle className="h-4 w-4 text-rose-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-rose-600">14</div>
+            <div className="text-2xl font-bold text-rose-600">{criticalCasesCount}</div>
             <p className="text-xs text-muted-foreground">
               Require immediate attention
             </p>
@@ -180,38 +214,46 @@ export default function Dashboard() {
                 <tr>
                   <th className="px-4 py-3 rounded-tl-md">Case ID</th>
                   <th className="px-4 py-3">Issue</th>
-                  <th className="px-4 py-3">Location</th>
+                  <th className="px-4 py-3">Category</th>
                   <th className="px-4 py-3">Priority</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3 rounded-tr-md">Date</th>
                 </tr>
               </thead>
               <tbody>
-                {recentCases.map((c) => (
-                  <tr key={c.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                    <td className="px-4 py-3 font-medium">{c.id}</td>
-                    <td className="px-4 py-3">{c.title}</td>
-                    <td className="px-4 py-3">{c.ward}</td>
-                    <td className="px-4 py-3">
-                      <Badge variant={c.priority === 'High' ? 'destructive' : c.priority === 'Medium' ? 'default' : 'secondary'}>
-                        {c.priority}
-                      </Badge>
+                {recentCases.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                      No recent cases found.
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        {c.status === 'Resolved' ? (
-                          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                        ) : c.status === 'In Progress' ? (
-                          <Clock className="h-4 w-4 text-blue-500" />
-                        ) : (
-                          <AlertTriangle className="h-4 w-4 text-amber-500" />
-                        )}
-                        {c.status}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">{c.date}</td>
                   </tr>
-                ))}
+                ) : (
+                  recentCases.map((c) => (
+                    <tr key={c.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                      <td className="px-4 py-3 font-medium">{c.id.substring(0, 8)}</td>
+                      <td className="px-4 py-3">{c.title}</td>
+                      <td className="px-4 py-3">{c.category}</td>
+                      <td className="px-4 py-3">
+                        <Badge variant={c.priority === 'High' ? 'destructive' : c.priority === 'Medium' ? 'default' : 'secondary'}>
+                          {c.priority}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          {c.status === 'Resolved' ? (
+                            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                          ) : c.status === 'In Progress' ? (
+                            <Clock className="h-4 w-4 text-blue-500" />
+                          ) : (
+                            <AlertTriangle className="h-4 w-4 text-amber-500" />
+                          )}
+                          {c.status}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">{c.date || c.createdAt.split('T')[0]}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

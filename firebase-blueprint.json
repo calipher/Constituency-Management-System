@@ -1,0 +1,147 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A staff member or MP using the system.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "name": { "type": "string", "description": "Full name of the user" },
+        "email": { "type": "string", "format": "email", "description": "Email address" },
+        "role": { "type": "string", "enum": ["admin", "staff"], "description": "Role of the user" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "email", "role", "createdAt"]
+    },
+    "Citizen": {
+      "title": "Citizen",
+      "description": "A citizen or voter in the constituency.",
+      "type": "object",
+      "properties": {
+        "idNumber": { "type": "string", "description": "National ID Number" },
+        "name": { "type": "string", "description": "Full name" },
+        "email": { "type": "string", "format": "email", "description": "Email address" },
+        "ward": { "type": "string", "description": "Ward name" },
+        "phone": { "type": "string", "description": "Phone number" },
+        "status": { "type": "string", "enum": ["Registered Voter", "Unregistered", "Deceased"], "description": "Voter status" },
+        "lastContact": { "type": "string", "format": "date-time", "description": "Last contact date" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["idNumber", "name", "ward", "status", "createdAt"]
+    },
+    "Case": {
+      "title": "Case",
+      "description": "A casework issue reported by a citizen.",
+      "type": "object",
+      "properties": {
+        "citizenId": { "type": "string", "description": "ID of the citizen" },
+        "citizenName": { "type": "string", "description": "Name of the citizen" },
+        "title": { "type": "string", "description": "Issue title" },
+        "category": { "type": "string", "description": "Category (e.g., Infrastructure, Education)" },
+        "status": { "type": "string", "enum": ["Open", "In Progress", "Resolved"], "description": "Case status" },
+        "priority": { "type": "string", "enum": ["Low", "Medium", "High"], "description": "Priority level" },
+        "assigneeId": { "type": "string", "description": "UID of the assigned staff member" },
+        "assigneeName": { "type": "string", "description": "Name of the assigned staff member" },
+        "description": { "type": "string", "description": "Detailed description" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["citizenName", "title", "category", "status", "priority", "createdAt"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "A CDF or constituency project.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Project name" },
+        "category": { "type": "string", "description": "Category (e.g., Education, Water)" },
+        "status": { "type": "string", "enum": ["Planning", "In Progress", "Completed", "On Hold"], "description": "Project status" },
+        "progress": { "type": "number", "description": "Completion percentage (0-100)" },
+        "budget": { "type": "number", "description": "Total budget allocated" },
+        "spent": { "type": "number", "description": "Amount spent so far" },
+        "location": { "type": "string", "description": "Location or Ward" },
+        "endDate": { "type": "string", "format": "date-time", "description": "Estimated completion date" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "category", "status", "progress", "budget", "spent", "location", "createdAt"]
+    },
+    "Event": {
+      "title": "Event",
+      "description": "An event or meeting.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Event title" },
+        "date": { "type": "string", "format": "date-time", "description": "Event date" },
+        "time": { "type": "string", "description": "Time string (e.g., 10:00 AM - 1:00 PM)" },
+        "location": { "type": "string", "description": "Event location" },
+        "attendees": { "type": "number", "description": "Estimated attendees" },
+        "type": { "type": "string", "description": "Event type (e.g., Public Meeting)" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "date", "time", "location", "type", "createdAt"]
+    },
+    "Document": {
+      "title": "Document",
+      "description": "A file or document.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "File name" },
+        "type": { "type": "string", "description": "File type (e.g., PDF, Word)" },
+        "size": { "type": "string", "description": "File size string" },
+        "category": { "type": "string", "description": "Document category" },
+        "uploaderId": { "type": "string", "description": "UID of the uploader" },
+        "uploaderName": { "type": "string", "description": "Name of the uploader" },
+        "url": { "type": "string", "description": "Download URL" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "type", "size", "category", "uploaderName", "createdAt"]
+    },
+    "Broadcast": {
+      "title": "Broadcast",
+      "description": "An SMS or Email broadcast.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["SMS", "Email"], "description": "Broadcast type" },
+        "targetAudience": { "type": "string", "description": "Target audience description" },
+        "subject": { "type": "string", "description": "Subject (for emails)" },
+        "content": { "type": "string", "description": "Message content" },
+        "sentCount": { "type": "number", "description": "Number of people sent to" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "targetAudience", "content", "sentCount", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "System users (admins and staff)"
+    },
+    "/citizens/{citizenId}": {
+      "schema": { "$ref": "#/entities/Citizen" },
+      "description": "Constituency citizens and voters"
+    },
+    "/cases/{caseId}": {
+      "schema": { "$ref": "#/entities/Case" },
+      "description": "Casework issues"
+    },
+    "/projects/{projectId}": {
+      "schema": { "$ref": "#/entities/Project" },
+      "description": "Constituency projects"
+    },
+    "/events/{eventId}": {
+      "schema": { "$ref": "#/entities/Event" },
+      "description": "Events and meetings"
+    },
+    "/documents/{documentId}": {
+      "schema": { "$ref": "#/entities/Document" },
+      "description": "Uploaded documents"
+    },
+    "/broadcasts/{broadcastId}": {
+      "schema": { "$ref": "#/entities/Broadcast" },
+      "description": "Communication broadcasts"
+    }
+  }
+}

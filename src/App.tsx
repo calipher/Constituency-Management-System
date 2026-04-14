@@ -1,4 +1,5 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Citizens from './pages/Citizens';
@@ -8,22 +9,60 @@ import MapView from './pages/MapView';
 import Communications from './pages/Communications';
 import Events from './pages/Events';
 import Documents from './pages/Documents';
+import Users from './pages/Users';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { Button } from './components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
+
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading, signIn } = useAuth();
+
+  if (loading) {
+    return <div className="flex h-screen w-full items-center justify-center">Loading...</div>;
+  }
+
+  if (!user) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-muted/40 p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-md bg-primary text-primary-foreground">
+              <span className="text-2xl font-bold">C</span>
+            </div>
+            <CardTitle className="text-2xl">ConstituencyOS</CardTitle>
+            <CardDescription>Sign in to manage the constituency</CardDescription>
+          </CardHeader>
+          <CardContent className="flex justify-center">
+            <Button onClick={signIn} size="lg" className="w-full">
+              Sign in with Google
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+}
 
 export default function App() {
   return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Dashboard />} />
-          <Route path="citizens" element={<Citizens />} />
-          <Route path="cases" element={<Cases />} />
-          <Route path="projects" element={<Projects />} />
-          <Route path="map" element={<MapView />} />
-          <Route path="communications" element={<Communications />} />
-          <Route path="events" element={<Events />} />
-          <Route path="documents" element={<Documents />} />
-        </Route>
-      </Routes>
-    </Router>
+    <AuthProvider>
+      <Router>
+        <Routes>
+          <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+            <Route index element={<Dashboard />} />
+            <Route path="citizens" element={<Citizens />} />
+            <Route path="cases" element={<Cases />} />
+            <Route path="projects" element={<Projects />} />
+            <Route path="map" element={<MapView />} />
+            <Route path="communications" element={<Communications />} />
+            <Route path="events" element={<Events />} />
+            <Route path="documents" element={<Documents />} />
+            <Route path="users" element={<Users />} />
+          </Route>
+        </Routes>
+      </Router>
+    </AuthProvider>
   );
 }

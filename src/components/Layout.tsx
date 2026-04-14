@@ -13,7 +13,8 @@ import {
   Bell,
   Search,
   Settings,
-  LogOut
+  LogOut,
+  Shield
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -27,6 +28,7 @@ import {
 } from './ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Sheet, SheetContent, SheetTrigger } from './ui/sheet';
+import { useAuth } from '../contexts/AuthContext';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -42,6 +44,12 @@ const navigation = [
 export default function Layout() {
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { user, role, logOut } = useAuth();
+
+  const getInitials = (name: string | null) => {
+    if (!name) return 'U';
+    return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+  };
 
   const NavLinks = () => (
     <>
@@ -63,6 +71,20 @@ export default function Layout() {
           </Link>
         );
       })}
+      {role === 'admin' && (
+        <Link
+          to="/users"
+          onClick={() => setIsMobileMenuOpen(false)}
+          className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${
+            location.pathname === '/users'
+              ? 'bg-primary text-primary-foreground' 
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+          }`}
+        >
+          <Shield className="h-5 w-5" />
+          <span className="font-medium">User Management</span>
+        </Link>
+      )}
     </>
   );
 
@@ -86,12 +108,12 @@ export default function Layout() {
         <div className="mt-auto p-4 border-t">
           <div className="flex items-center gap-3 px-2 py-2">
             <Avatar className="h-9 w-9">
-              <AvatarImage src="https://github.com/shadcn.png" alt="@shadcn" />
-              <AvatarFallback>MP</AvatarFallback>
+              <AvatarImage src={user?.photoURL || ''} alt={user?.displayName || 'User'} />
+              <AvatarFallback>{getInitials(user?.displayName)}</AvatarFallback>
             </Avatar>
             <div className="flex flex-col">
-              <span className="text-sm font-medium">Hon. Member</span>
-              <span className="text-xs text-muted-foreground">Admin</span>
+              <span className="text-sm font-medium line-clamp-1">{user?.displayName || 'User'}</span>
+              <span className="text-xs text-muted-foreground capitalize">{role || 'Staff'}</span>
             </div>
           </div>
         </div>
@@ -157,20 +179,28 @@ export default function Layout() {
           <DropdownMenu>
             <DropdownMenuTrigger render={<Button variant="secondary" size="icon" className="rounded-full" />}>
               <Avatar className="h-9 w-9">
-                <AvatarImage src="https://github.com/shadcn.png" alt="@shadcn" />
-                <AvatarFallback>MP</AvatarFallback>
+                <AvatarImage src={user?.photoURL || ''} alt={user?.displayName || 'User'} />
+                <AvatarFallback>{getInitials(user?.displayName)}</AvatarFallback>
               </Avatar>
               <span className="sr-only">Toggle user menu</span>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>My Account</DropdownMenuLabel>
               <DropdownMenuSeparator />
+              {role === 'admin' && (
+                <DropdownMenuItem asChild>
+                  <Link to="/users" className="cursor-pointer w-full flex items-center">
+                    <Shield className="mr-2 h-4 w-4" />
+                    User Management
+                  </Link>
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem>
                 <Settings className="mr-2 h-4 w-4" />
                 Settings
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={logOut}>
                 <LogOut className="mr-2 h-4 w-4" />
                 Logout
               </DropdownMenuItem>

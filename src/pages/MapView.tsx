@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Building2, AlertTriangle, Users } from 'lucide-react';
+import { collection, onSnapshot, query } from 'firebase/firestore';
+import { db } from '@/firebase';
 
 // Fix for default marker icons in react-leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -14,19 +16,43 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-const projectMarkers = [
-  { id: 1, position: [-1.2921, 36.8219], title: 'Ward 4 Secondary School Lab', type: 'project', status: 'In Progress' },
-  { id: 2, position: [-1.3000, 36.8100], title: 'Central Market Borehole', type: 'project', status: 'Completed' },
-  { id: 3, position: [-1.2850, 36.8300], title: 'Dispensary Maternity Wing', type: 'project', status: 'Planning' },
-];
-
-const issueMarkers = [
-  { id: 1, position: [-1.2950, 36.8250], title: 'Broken Water Pipe', type: 'issue', priority: 'High' },
-  { id: 2, position: [-1.2880, 36.8150], title: 'Pothole on Main Road', type: 'issue', priority: 'Medium' },
-];
-
 export default function MapView() {
   const center: [number, number] = [-1.2921, 36.8219]; // Nairobi coordinates as placeholder
+  
+  const [projects, setProjects] = useState<any[]>([]);
+  const [cases, setCases] = useState<any[]>([]);
+
+  useEffect(() => {
+    // We'll generate mock coordinates for projects and cases since they don't have them in the DB yet
+    // In a real app, you'd add lat/lng to the Firestore documents
+    
+    const unsubProjects = onSnapshot(query(collection(db, 'projects')), (snapshot) => {
+      const data: any[] = [];
+      snapshot.forEach((doc) => {
+        // Generate random coordinates near the center
+        const lat = center[0] + (Math.random() - 0.5) * 0.05;
+        const lng = center[1] + (Math.random() - 0.5) * 0.05;
+        data.push({ id: doc.id, position: [lat, lng], ...doc.data() });
+      });
+      setProjects(data);
+    });
+
+    const unsubCases = onSnapshot(query(collection(db, 'cases')), (snapshot) => {
+      const data: any[] = [];
+      snapshot.forEach((doc) => {
+        // Generate random coordinates near the center
+        const lat = center[0] + (Math.random() - 0.5) * 0.05;
+        const lng = center[1] + (Math.random() - 0.5) * 0.05;
+        data.push({ id: doc.id, position: [lat, lng], ...doc.data() });
+      });
+      setCases(data);
+    });
+
+    return () => {
+      unsubProjects();
+      unsubCases();
+    };
+  }, []);
 
   return (
     <div className="flex flex-col gap-6 h-[calc(100vh-100px)]">
@@ -51,17 +77,18 @@ export default function MapView() {
             />
             
             {/* Project Markers */}
-            {projectMarkers.map((marker) => (
+            {projects.map((marker) => (
               <Marker key={`proj-${marker.id}`} position={marker.position as [number, number]}>
                 <Popup>
-                  <div className="font-medium">{marker.title}</div>
+                  <div className="font-medium">{marker.name}</div>
                   <div className="text-xs text-muted-foreground mt-1">Status: {marker.status}</div>
+                  <div className="text-xs text-muted-foreground">Category: {marker.category}</div>
                 </Popup>
               </Marker>
             ))}
 
             {/* Issue Circles */}
-            {issueMarkers.map((issue) => (
+            {cases.map((issue) => (
               <Circle 
                 key={`iss-${issue.id}`}
                 center={issue.position as [number, number]} 
@@ -71,6 +98,7 @@ export default function MapView() {
                 <Popup>
                   <div className="font-medium">{issue.title}</div>
                   <div className="text-xs text-muted-foreground mt-1">Priority: {issue.priority}</div>
+                  <div className="text-xs text-muted-foreground">Status: {issue.status}</div>
                 </Popup>
               </Circle>
             ))}
