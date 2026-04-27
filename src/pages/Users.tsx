@@ -13,9 +13,15 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { collection, onSnapshot, query, doc, updateDoc, deleteDoc, setDoc } from 'firebase/firestore';
-import { db } from '@/firebase';
+import { db, firebaseConfig } from '@/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
+import { initializeApp } from 'firebase/app';
+import { getAuth, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+
+// Initialize a secondary app for creating users without signing out the admin
+const secondaryApp = initializeApp(firebaseConfig, "Secondary");
+const secondaryAuth = getAuth(secondaryApp);
 
 interface UserData {
   id: string;
@@ -42,8 +48,20 @@ export default function Users() {
   
   // Invite form state
   const [inviteEmail, setInviteEmail] = useState('');
+  const [invitePassword, setInvitePassword] = useState('');
   const [inviteRole, setInviteRole] = useState('staff');
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
+  const [inviteError, setInviteError] = useState('');
+
+  // Add Staff form state
+  const [addStaffName, setAddStaffName] = useState('');
+  const [addStaffEmail, setAddStaffEmail] = useState('');
+  const [addStaffPassword, setAddStaffPassword] = useState('');
+  const [addStaffRole, setAddStaffRole] = useState('staff');
+  const [addStaffPhone, setAddStaffPhone] = useState('');
+  const [addStaffDepartment, setAddStaffDepartment] = useState('');
+  const [isAddStaffDialogOpen, setIsAddStaffDialogOpen] = useState(false);
+  const [addStaffError, setAddStaffError] = useState('');
 
   useEffect(() => {
     if (currentUserRole !== 'admin') return;
@@ -105,21 +123,43 @@ export default function Users() {
   const handleInviteUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteEmail) return;
+    setInviteError('');
     
     try {
+      if (invitePassword) {
+        // If an explicit password is provided, try to create an Email/Password account
+        try {
+          await createUserWithEmailAndPassword(secondaryAuth, inviteEmail, invitePassword);
+          // Optional: Send password reset/welcome email if desired
+          // await sendPasswordResetEmail(secondaryAuth, inviteEmail);
+        } catch (authError: any) {
+          if (authError.code === 'auth/operation-not-allowed') {
+            throw new Error("Email/Password authentication is disabled in Firebase. Leave password blank for Google Sign-In, or enable Email/Password in your Firebase Console.");
+          }
+          throw authError; // Rethrow other errors
+        }
+      }
+
       // Create an invitation document with the email as the ID
+      // This allows the user to sign in with Google or the created email/password
       await setDoc(doc(db, 'invitations', inviteEmail.toLowerCase()), {
         role: inviteRole,
         createdAt: new Date().toISOString()
       });
       
       setInviteEmail('');
+      setInvitePassword('');
       setInviteRole('staff');
       setIsInviteDialogOpen(false);
-      alert(`Invitation created for ${inviteEmail}. They can now sign in.`);
-    } catch (error) {
+      
+      if (invitePassword) {
+        alert(`Invitation sent! Account created for ${inviteEmail}.`);
+      } else {
+        alert(`Invitation recorded! ${inviteEmail} can now access the system using Google Sign-In.`);
+      }
+    } catch (error: any) {
       console.error("Error inviting user:", error);
-      alert("Failed to invite user.");
+      setInviteError(error.message || "Failed to create user invitation.");
     }
   };
 
@@ -130,6 +170,42 @@ export default function Users() {
     } catch (error) {
       console.error("Error revoking invitation:", error);
       alert("Failed to revoke invitation.");
+    }
+  };
+
+  const handleAddStaff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!addStaffName || !addStaffEmail || !addStaffPassword) return;
+    setAddStaffError('');
+    
+    try {
+      const userCred = await createUserWithEmailAndPassword(secondaryAuth, addStaffEmail, addStaffPassword);
+      
+      await setDoc(doc(db, 'users', userCred.user.uid), {
+        name: addStaffName,
+        email: addStaffEmail,
+        role: addStaffRole,
+        phone: addStaffPhone,
+        department: addStaffDepartment,
+        uid: userCred.user.uid,
+        createdAt: new Date().toISOString()
+      });
+      
+      setAddStaffName('');
+      setAddStaffEmail('');
+      setAddStaffPassword('');
+      setAddStaffRole('staff');
+      setAddStaffPhone('');
+      setAddStaffDepartment('');
+      setIsAddStaffDialogOpen(false);
+      alert(`Staff member ${addStaffName} added successfully.`);
+    } catch (error: any) {
+      console.error("Error adding staff:", error);
+      if (error.code === 'auth/operation-not-allowed') {
+        setAddStaffError("Email/Password authentication is disabled in Firebase. Please enable it in the Firebase Console to add staff manually.");
+      } else {
+        setAddStaffError(error.message || "Failed to create staff member.");
+      }
     }
   };
 
@@ -145,15 +221,16 @@ export default function Users() {
           <h1 className="text-3xl font-bold tracking-tight">User Management</h1>
           <p className="text-muted-foreground">Manage staff access and administrative roles.</p>
         </div>
-        <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>
-          <DialogTrigger asChild>
-            <Button><Plus className="mr-2 h-4 w-4" /> Invite User</Button>
-          </DialogTrigger>
-          <DialogContent>
+        <div className="flex gap-2">
+          <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>
+            <DialogTrigger render={<Button variant="outline" />}>
+              <Mail className="mr-2 h-4 w-4" /> Invite User
+            </DialogTrigger>
+            <DialogContent>
             <DialogHeader>
               <DialogTitle>Invite New User</DialogTitle>
               <DialogDescription>
-                Pre-register a user by their email address. When they sign in with Google using this email, they will be granted access.
+                Invite a user by their email address. They will receive an email with a link to set their password and sign in.
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleInviteUser} className="space-y-4 pt-4">
@@ -168,6 +245,16 @@ export default function Users() {
                 />
               </div>
               <div className="space-y-2">
+                <label className="text-sm font-medium">Password (Optional)</label>
+                <Input 
+                  type="password" 
+                  placeholder="Leave blank to only allow Google Sign-In" 
+                  value={invitePassword}
+                  onChange={(e) => setInvitePassword(e.target.value)}
+                  minLength={6}
+                />
+              </div>
+              <div className="space-y-2">
                 <label className="text-sm font-medium">Role</label>
                 <select 
                   className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
@@ -178,13 +265,101 @@ export default function Users() {
                   <option value="admin">Admin</option>
                 </select>
               </div>
+              {inviteError && <p className="text-sm text-destructive">{inviteError}</p>}
               <div className="flex justify-end gap-2 pt-4">
                 <Button type="button" variant="outline" onClick={() => setIsInviteDialogOpen(false)}>Cancel</Button>
-                <Button type="submit">Send Invitation</Button>
+                <Button type="submit">Send Invite</Button>
               </div>
             </form>
           </DialogContent>
         </Dialog>
+
+        <Dialog open={isAddStaffDialogOpen} onOpenChange={setIsAddStaffDialogOpen}>
+          <DialogTrigger render={<Button />}>
+            <Plus className="mr-2 h-4 w-4" /> Capture Staff
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[550px]">
+            <DialogHeader>
+              <DialogTitle>Add Staff Member</DialogTitle>
+              <DialogDescription>
+                Manually capture and create an account for a new staff member.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleAddStaff} className="space-y-4 pt-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Full Name <span className="text-destructive">*</span></label>
+                  <Input 
+                    placeholder="e.g. Jane Doe" 
+                    value={addStaffName}
+                    onChange={(e) => setAddStaffName(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Email Address <span className="text-destructive">*</span></label>
+                  <Input 
+                    type="email" 
+                    placeholder="jane@example.com" 
+                    value={addStaffEmail}
+                    onChange={(e) => setAddStaffEmail(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Password <span className="text-destructive">*</span></label>
+                  <Input 
+                    type="password" 
+                    placeholder="Secure password" 
+                    value={addStaffPassword}
+                    onChange={(e) => setAddStaffPassword(e.target.value)}
+                    required
+                    minLength={6}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Role <span className="text-destructive">*</span></label>
+                  <select 
+                    className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={addStaffRole}
+                    onChange={(e) => setAddStaffRole(e.target.value)}
+                    required
+                  >
+                    <option value="staff">Staff</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Phone Number</label>
+                  <Input 
+                    type="tel" 
+                    placeholder="+263 7..." 
+                    value={addStaffPhone}
+                    onChange={(e) => setAddStaffPhone(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Department</label>
+                  <Input 
+                    placeholder="e.g. Health, Infrastructure" 
+                    value={addStaffDepartment}
+                    onChange={(e) => setAddStaffDepartment(e.target.value)}
+                  />
+                </div>
+              </div>
+              {addStaffError && <p className="text-sm text-destructive">{addStaffError}</p>}
+              <div className="flex justify-end gap-2 pt-4">
+                <Button type="button" variant="outline" onClick={() => setIsAddStaffDialogOpen(false)}>Cancel</Button>
+                <Button type="submit">Create Staff Account</Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
       </div>
 
       {invitations.length > 0 && (

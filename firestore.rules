@@ -13,14 +13,18 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() &&
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-          (request.auth.token.email == "calipherrndlovu@gmail.com" && request.auth.token.email_verified == true)); // Default admin
+        (
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+          request.auth.token.email == "calipherrndlovu@gmail.com"
+        );
     }
 
     function isStaffOrAdmin() {
       return isAuthenticated() &&
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'staff'] ||
-          (request.auth.token.email == "calipherrndlovu@gmail.com" && request.auth.token.email_verified == true));
+        (
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'staff']) ||
+          request.auth.token.email == "calipherrndlovu@gmail.com"
+        );
     }
 
     function isOwner(userId) {
@@ -40,11 +44,11 @@ service cloud.firestore {
     // Domain Validators
     // ===============================================================
 
-    function isValidUser(data) {
+    function isValidUser(data, docId) {
       return data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              data.email is string && isValidEmail(data.email) &&
              data.role in ['admin', 'staff'] &&
-             data.uid == request.auth.uid;
+             data.uid == docId;
     }
 
     // ===============================================================
@@ -54,8 +58,8 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isAuthenticated();
       // Allow user to create their own profile if they are the default admin, or if an admin creates it
-      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(userId) || isAdmin());
-      allow update: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(userId) || isAdmin());
+      allow create: if isAuthenticated() && isValidUser(request.resource.data, userId) && (isOwner(userId) || isAdmin());
+      allow update: if isAuthenticated() && isValidUser(request.resource.data, userId) && (isOwner(userId) || isAdmin());
       allow delete: if isAdmin();
     }
 
@@ -96,6 +100,13 @@ service cloud.firestore {
     match /invitations/{email} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isStaffOrAdmin() && hasRequiredFields(['userId', 'title', 'message', 'read', 'createdAt']);
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow delete: if isAdmin();
     }
   }
 }

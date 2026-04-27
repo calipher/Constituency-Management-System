@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Users, 
   Briefcase, 
   TrendingUp, 
   AlertTriangle,
   CheckCircle2,
-  Clock
+  Clock,
+  Plus
 } from 'lucide-react';
 import { 
   Card, 
@@ -16,6 +17,15 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   BarChart,
   Bar,
@@ -27,8 +37,9 @@ import {
   LineChart,
   Line
 } from 'recharts';
-import { collection, onSnapshot, query, limit, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, query, limit, orderBy, addDoc } from 'firebase/firestore';
 import { db } from '@/firebase';
+import { useNavigate } from 'react-router-dom';
 
 const caseData = [
   { name: 'Jan', resolved: 40, new: 64 },
@@ -52,6 +63,17 @@ export default function Dashboard() {
   const [activeCasesCount, setActiveCasesCount] = useState(0);
   const [criticalCasesCount, setCriticalCasesCount] = useState(0);
   const [recentCases, setRecentCases] = useState<any[]>([]);
+  const navigate = useNavigate();
+
+  // New Case Form State
+  const [isNewCaseDialogOpen, setIsNewCaseDialogOpen] = useState(false);
+  const [newCaseTitle, setNewCaseTitle] = useState('');
+  const [newCaseCitizen, setNewCaseCitizen] = useState('');
+  const [newCaseCategory, setNewCaseCategory] = useState('Infrastructure');
+  const [newCasePriority, setNewCasePriority] = useState('Medium');
+  const [newCaseAssignee, setNewCaseAssignee] = useState('Unassigned');
+  const [newCaseDescription, setNewCaseDescription] = useState('');
+  const [staffMembers, setStaffMembers] = useState<{id: string, name: string}[]>([]);
 
   useEffect(() => {
     // Listen to citizens
@@ -80,11 +102,69 @@ export default function Dashboard() {
       setRecentCases(cases.slice(0, 5));
     });
 
+    // Listen to staff members
+    const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
+      const staff: {id: string, name: string}[] = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        staff.push({ id: doc.id, name: data.name || data.email || 'Unknown User' });
+      });
+      setStaffMembers(staff);
+    });
+
     return () => {
       unsubCitizens();
       unsubCases();
+      unsubUsers();
     };
   }, []);
+
+  const handleCreateCase = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCaseTitle || !newCaseCitizen) return;
+
+    try {
+      const caseRef = await addDoc(collection(db, 'cases'), {
+        citizenName: newCaseCitizen,
+        title: newCaseTitle,
+        category: newCaseCategory,
+        status: 'Open',
+        priority: newCasePriority,
+        date: new Date().toISOString().split('T')[0],
+        assigneeName: newCaseAssignee,
+        description: newCaseDescription,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+
+      // If assigned to a staff member, create a notification
+      if (newCaseAssignee !== 'Unassigned') {
+        const assignedStaff = staffMembers.find(s => s.name === newCaseAssignee);
+        if (assignedStaff) {
+          await addDoc(collection(db, 'notifications'), {
+            userId: assignedStaff.id,
+            title: 'New Case Assigned',
+            message: `You have been assigned to a new case: ${newCaseTitle}`,
+            read: false,
+            caseId: caseRef.id,
+            createdAt: new Date().toISOString()
+          });
+        }
+      }
+      
+      // Reset form and close dialog
+      setNewCaseTitle('');
+      setNewCaseCitizen('');
+      setNewCaseCategory('Infrastructure');
+      setNewCasePriority('Medium');
+      setNewCaseAssignee('Unassigned');
+      setNewCaseDescription('');
+      setIsNewCaseDialogOpen(false);
+    } catch (error) {
+      console.error("Error adding case:", error);
+      alert("Failed to create case.");
+    }
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -95,7 +175,92 @@ export default function Dashboard() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline">Download Report</Button>
-          <Button>New Case</Button>
+          <Dialog open={isNewCaseDialogOpen} onOpenChange={setIsNewCaseDialogOpen}>
+            <DialogTrigger render={<Button><Plus className="mr-2 h-4 w-4" /> New Case</Button>} />
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Log New Case</DialogTitle>
+                <DialogDescription>
+                  Capture a new issue or request from a citizen.
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleCreateCase} className="space-y-4 pt-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Citizen Name</label>
+                  <Input 
+                    placeholder="e.g. John Doe" 
+                    value={newCaseCitizen}
+                    onChange={(e) => setNewCaseCitizen(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Issue Title</label>
+                  <Input 
+                    placeholder="Brief description of the issue" 
+                    value={newCaseTitle}
+                    onChange={(e) => setNewCaseTitle(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Category</label>
+                    <select 
+                      className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      value={newCaseCategory}
+                      onChange={(e) => setNewCaseCategory(e.target.value)}
+                    >
+                      <option value="Infrastructure">Infrastructure</option>
+                      <option value="Education">Education</option>
+                      <option value="Health">Health</option>
+                      <option value="Water">Water</option>
+                      <option value="Security">Security</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Priority</label>
+                    <select 
+                      className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      value={newCasePriority}
+                      onChange={(e) => setNewCasePriority(e.target.value)}
+                    >
+                      <option value="Low">Low</option>
+                      <option value="Medium">Medium</option>
+                      <option value="High">High</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Assign To</label>
+                  <select 
+                    className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={newCaseAssignee}
+                    onChange={(e) => setNewCaseAssignee(e.target.value)}
+                  >
+                    <option value="Unassigned">Unassigned</option>
+                    {staffMembers.map(staff => (
+                      <option key={staff.id} value={staff.name}>{staff.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Description</label>
+                  <textarea 
+                    className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    placeholder="Detailed description of the case..."
+                    value={newCaseDescription}
+                    onChange={(e) => setNewCaseDescription(e.target.value)}
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-4">
+                  <Button type="button" variant="outline" onClick={() => setIsNewCaseDialogOpen(false)}>Cancel</Button>
+                  <Button type="submit">Save Case</Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
@@ -242,7 +407,7 @@ export default function Dashboard() {
                         <div className="flex items-center gap-2">
                           {c.status === 'Resolved' ? (
                             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                          ) : c.status === 'In Progress' ? (
+                          ) : (c.status === 'Work In Progress' || c.status === 'In Progress') ? (
                             <Clock className="h-4 w-4 text-blue-500" />
                           ) : (
                             <AlertTriangle className="h-4 w-4 text-amber-500" />

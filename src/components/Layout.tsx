@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Outlet, Link, useLocation } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   Users, 
@@ -14,7 +14,10 @@ import {
   Search,
   Settings,
   LogOut,
-  Shield
+  Shield,
+  Sun,
+  Moon,
+  Check
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -25,10 +28,15 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuGroup,
 } from './ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Sheet, SheetContent, SheetTrigger } from './ui/sheet';
+import { Badge } from './ui/badge';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
+import { collection, query, where, onSnapshot, orderBy, updateDoc, doc } from 'firebase/firestore';
+import { db } from '../firebase';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -43,8 +51,76 @@ const navigation = [
 
 export default function Layout() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
   const { user, role, logOut } = useAuth();
+  const { theme, setTheme } = useTheme();
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const q = query(
+      collection(db, 'notifications'),
+      where('userId', '==', user.uid),
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const notifs: any[] = [];
+      let unread = 0;
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        if (!data.read) unread++;
+        notifs.push({ id: doc.id, ...data });
+      });
+      setNotifications(notifs);
+      setUnreadCount(unread);
+    }, (error) => {
+      console.error("Error fetching notifications:", error);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  const markAsRead = async (e: React.MouseEvent, notificationId: string) => {
+    e.stopPropagation();
+    try {
+      await updateDoc(doc(db, 'notifications', notificationId), {
+        read: true
+      });
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+    }
+  };
+
+  const handleNotificationClick = async (notif: any) => {
+    if (!notif.read) {
+      try {
+        await updateDoc(doc(db, 'notifications', notif.id), { read: true });
+      } catch (error) {
+        console.error("Error marking as read:", error);
+      }
+    }
+    setIsNotifOpen(false);
+    if (notif.caseId) {
+      navigate('/cases');
+    }
+  };
+
+  const formatDate = (dateVal: any) => {
+    if (!dateVal) return '';
+    try {
+      if (typeof dateVal.toDate === 'function') {
+        return dateVal.toDate().toLocaleString();
+      }
+      return new Date(dateVal).toLocaleString();
+    } catch (e) {
+      return '';
+    }
+  };
 
   const getInitials = (name: string | null) => {
     if (!name) return 'U';
@@ -152,27 +228,80 @@ export default function Layout() {
           </div>
 
           <DropdownMenu>
-            <DropdownMenuTrigger render={<Button variant="outline" size="icon" className="relative" />}>
+            <DropdownMenuTrigger render={<Button variant="outline" size="icon" className="relative rounded-full" />}>
+              <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+              <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+              <span className="sr-only">Toggle theme</span>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setTheme("light")}>
+                Light
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTheme("dark")}>
+                Dark
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTheme("system")}>
+                System
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <DropdownMenu open={isNotifOpen} onOpenChange={setIsNotifOpen}>
+            <DropdownMenuTrigger render={<Button variant="outline" size="icon" className="relative rounded-full" />}>
               <Bell className="h-5 w-5" />
-              <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-destructive"></span>
+              {unreadCount > 0 && (
+                <span className="absolute top-0 right-0 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
+                  {unreadCount}
+                </span>
+              )}
               <span className="sr-only">Toggle notifications</span>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[300px]">
-              <DropdownMenuLabel>Notifications</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <div className="flex flex-col gap-2 p-2">
-                <div className="flex flex-col gap-1">
-                  <span className="text-sm font-medium">New Case Logged</span>
-                  <span className="text-xs text-muted-foreground">Water shortage in Ward 4</span>
-                  <span className="text-xs text-muted-foreground">10 minutes ago</span>
-                </div>
+            <DropdownMenuContent align="end" className="w-[320px] max-h-[400px] overflow-y-auto">
+              <DropdownMenuGroup>
+                <DropdownMenuLabel className="flex justify-between items-center">
+                  <span>Notifications</span>
+                  {unreadCount > 0 && (
+                    <Badge variant="secondary" className="text-xs">{unreadCount} unread</Badge>
+                  )}
+                </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <div className="flex flex-col gap-1">
-                  <span className="text-sm font-medium">Project Update</span>
-                  <span className="text-xs text-muted-foreground">School roof repair 80% complete</span>
-                  <span className="text-xs text-muted-foreground">2 hours ago</span>
+                <div className="flex flex-col">
+                  {notifications.length === 0 ? (
+                    <div className="p-4 text-center text-sm text-muted-foreground">
+                      No notifications yet.
+                    </div>
+                  ) : (
+                    notifications.map((notif) => (
+                      <DropdownMenuItem 
+                        key={notif.id} 
+                        onClick={() => handleNotificationClick(notif)}
+                        className={`flex flex-col items-start gap-1 p-3 border-b last:border-0 cursor-pointer ${!notif.read ? 'bg-muted/20' : ''}`}
+                      >
+                        <div className="flex justify-between items-start gap-2 w-full">
+                          <span className={`text-sm ${!notif.read ? 'font-semibold' : 'font-medium'}`}>
+                            {notif.title}
+                          </span>
+                          {!notif.read && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-5 w-5 shrink-0 text-muted-foreground hover:text-foreground"
+                              onClick={(e) => markAsRead(e, notif.id)}
+                              title="Mark as read"
+                            >
+                              <Check className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
+                        <span className="text-xs text-muted-foreground whitespace-normal text-left">{notif.message}</span>
+                        <span className="text-[10px] text-muted-foreground mt-1">
+                          {formatDate(notif.createdAt)}
+                        </span>
+                      </DropdownMenuItem>
+                    ))
+                  )}
                 </div>
-              </div>
+              </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -185,25 +314,27 @@ export default function Layout() {
               <span className="sr-only">Toggle user menu</span>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuLabel>My Account</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {role === 'admin' && (
-                <DropdownMenuItem asChild>
-                  <Link to="/users" className="cursor-pointer w-full flex items-center">
-                    <Shield className="mr-2 h-4 w-4" />
-                    User Management
-                  </Link>
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {role === 'admin' && (
+                  <DropdownMenuItem render={
+                    <Link to="/users" className="cursor-pointer w-full flex items-center">
+                      <Shield className="mr-2 h-4 w-4" />
+                      User Management
+                    </Link>
+                  } />
+                )}
+                <DropdownMenuItem>
+                  <Settings className="mr-2 h-4 w-4" />
+                  Settings
                 </DropdownMenuItem>
-              )}
-              <DropdownMenuItem>
-                <Settings className="mr-2 h-4 w-4" />
-                Settings
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={logOut}>
-                <LogOut className="mr-2 h-4 w-4" />
-                Logout
-              </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={logOut}>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Logout
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
         </header>

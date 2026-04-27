@@ -17,7 +17,7 @@ L.Icon.Default.mergeOptions({
 });
 
 export default function MapView() {
-  const center: [number, number] = [-1.2921, 36.8219]; // Nairobi coordinates as placeholder
+  const center: [number, number] = [-20.1900, 28.5300]; // Nkulumane, Bulawayo coordinates
   
   const [projects, setProjects] = useState<any[]>([]);
   const [cases, setCases] = useState<any[]>([]);

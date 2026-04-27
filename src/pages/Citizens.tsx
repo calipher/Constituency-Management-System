@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Search, Filter, Plus, MoreHorizontal, Mail, Phone, Download, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Search, Filter, Plus, MoreHorizontal, Mail, Phone, Download, Trash2, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -34,6 +35,8 @@ export default function Citizens() {
   const [searchTerm, setSearchTerm] = useState('');
   const [citizensData, setCitizensData] = useState<Citizen[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isImporting, setIsImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const q = query(collection(db, 'citizens'));
@@ -99,6 +102,76 @@ export default function Citizens() {
     ]);
   };
 
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    try {
+      const text = await file.text();
+      const rows = text.split('\n').map(row => row.trim()).filter(row => row.length > 0);
+      
+      if (rows.length <= 1) {
+        alert("CSV file is empty or only contains headers.");
+        setIsImporting(false);
+        return;
+      }
+
+      const headers = rows[0].split(',').map(h => h.trim().toLowerCase());
+      
+      // Find indexes
+      const nameIdx = headers.findIndex(h => h.includes('name'));
+      const idIdx = headers.findIndex(h => h.includes('id'));
+      const emailIdx = headers.findIndex(h => h.includes('email'));
+      const wardIdx = headers.findIndex(h => h.includes('ward'));
+      const phoneIdx = headers.findIndex(h => h.includes('phone') || h.includes('contact'));
+      const statusIdx = headers.findIndex(h => h.includes('status'));
+
+      let importedCount = 0;
+
+      for (let i = 1; i < rows.length; i++) {
+        // Split by comma, respecting quotes
+        const values = rows[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(v => v.replace(/^"|"$/g, '').trim());
+        
+        if (values.length < 2) continue; // Skip malformed rows
+
+        const name = nameIdx >= 0 && values[nameIdx] ? values[nameIdx] : `Citizen ${Math.floor(Math.random() * 1000)}`;
+        const idNumber = idIdx >= 0 && values[idIdx] ? values[idIdx] : Math.floor(Math.random() * 100000000).toString();
+        const email = emailIdx >= 0 && values[emailIdx] ? values[emailIdx] : '';
+        const ward = wardIdx >= 0 && values[wardIdx] ? values[wardIdx] : 'Ward 1';
+        const phone = phoneIdx >= 0 && values[phoneIdx] ? values[phoneIdx] : '';
+        const status = statusIdx >= 0 && values[statusIdx] ? values[statusIdx] : 'Registered Voter';
+
+        await addDoc(collection(db, 'citizens'), {
+          name,
+          idNumber,
+          email,
+          ward,
+          phone,
+          status,
+          lastContact: new Date().toISOString().split('T')[0],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+        importedCount++;
+      }
+
+      alert(`Successfully imported ${importedCount} citizens.`);
+    } catch (error) {
+      console.error("Error importing CSV:", error);
+      alert("Failed to import CSV. Please check the file format.");
+    } finally {
+      setIsImporting(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -107,6 +180,17 @@ export default function Citizens() {
           <p className="text-muted-foreground">Manage constituency database, voter registration, and demographics.</p>
         </div>
         <div className="flex gap-2">
+          <input 
+            type="file" 
+            accept=".csv" 
+            className="hidden" 
+            ref={fileInputRef} 
+            onChange={handleFileUpload} 
+          />
+          <Button variant="outline" onClick={handleImportClick} disabled={isImporting}>
+            <Upload className="mr-2 h-4 w-4" /> 
+            {isImporting ? 'Importing...' : 'Import CSV'}
+          </Button>
           <Button variant="outline" onClick={handleExport}><Download className="mr-2 h-4 w-4" /> Export CSV</Button>
           <Button onClick={handleAddMockCitizen}><Plus className="mr-2 h-4 w-4" /> Add Citizen</Button>
         </div>
@@ -190,25 +274,27 @@ export default function Citizens() {
                             <MoreHorizontal className="h-4 w-4" />
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                            <DropdownMenuItem>View Profile</DropdownMenuItem>
-                            <DropdownMenuItem>Edit Details</DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem>
-                              <Mail className="mr-2 h-4 w-4" /> Send SMS
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>Log Case</DropdownMenuItem>
-                            {role === 'admin' && (
-                              <>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem 
-                                  className="text-destructive focus:text-destructive"
-                                  onClick={() => handleDeleteCitizen(citizen.id)}
-                                >
-                                  <Trash2 className="mr-2 h-4 w-4" /> Delete Citizen
-                                </DropdownMenuItem>
-                              </>
-                            )}
+                            <DropdownMenuGroup>
+                              <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                              <DropdownMenuItem>View Profile</DropdownMenuItem>
+                              <DropdownMenuItem>Edit Details</DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem>
+                                <Mail className="mr-2 h-4 w-4" /> Send SMS
+                              </DropdownMenuItem>
+                              <DropdownMenuItem>Log Case</DropdownMenuItem>
+                              {role === 'admin' ? (
+                                <React.Fragment>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem 
+                                    className="text-destructive focus:text-destructive"
+                                    onClick={() => handleDeleteCitizen(citizen.id)}
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" /> Delete Citizen
+                                  </DropdownMenuItem>
+                                </React.Fragment>
+                              ) : null}
+                            </DropdownMenuGroup>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </td>

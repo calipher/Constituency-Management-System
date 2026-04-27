@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Search, Filter, Plus, Clock, CheckCircle2, AlertTriangle, User, Tag, Calendar, FileText, Download, Trash2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Search, Filter, Plus, Clock, CheckCircle2, AlertTriangle, User, Tag, Calendar, FileText, Download, Trash2, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,8 +9,10 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -19,6 +21,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { collection, onSnapshot, query, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/firebase';
 import { exportToCSV } from '@/lib/exportUtils';
@@ -44,6 +48,17 @@ export default function Cases() {
   const [loading, setLoading] = useState(true);
   const [selectedCase, setSelectedCase] = useState<Case | null>(null);
 
+  const [isNewCaseDialogOpen, setIsNewCaseDialogOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [newCaseData, setNewCaseData] = useState({
+    title: '',
+    citizenName: '',
+    category: '',
+    priority: '',
+    description: '',
+  });
+
   useEffect(() => {
     const q = query(collection(db, 'cases'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -61,22 +76,78 @@ export default function Cases() {
     return () => unsubscribe();
   }, []);
 
-  const handleAddMockCase = async () => {
+  const handleSyncExternalCases = async () => {
+    setIsSyncing(true);
+    try {
+      const url = 'https://script.google.com/macros/s/AKfycbxJcmT6h94oai4egEAEDFDJkhlGJty-ri5rV_HzYsvW-bUrLkJpAUx1BvOT-oiqtdqA/exec';
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log("External Data Response:", data);
+      
+      // Attempt to map and save data based on standard generic structure or alert user if they need to format it.
+      if (Array.isArray(data) && data.length > 0) {
+        let addedCount = 0;
+        for (const item of data) {
+          // If we can map it to our format we add it to firestore. 
+          // For now we will just log it and inform the user it connected, 
+          // but we can make a best-effort mapping if they use common keys like "Name" or "Issue"
+          const mappedCase = {
+            title: item.Title || item.title || item.Issue || item.issue || item.Subject || 'External Case',
+            citizenName: item.Name || item.name || item.Citizen || item.citizen || 'Unknown Citizen',
+            category: item.Category || item.category || item.Type || 'Other',
+            priority: item.Priority || item.priority || 'Medium',
+            description: item.Description || item.description || item.Message || item.message || JSON.stringify(item),
+            status: 'Open',
+            date: new Date().toISOString().split('T')[0],
+            assigneeName: 'Unassigned',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+          
+          await addDoc(collection(db, 'cases'), mappedCase);
+          addedCount++;
+        }
+        alert(`Successfully connected and imported ${addedCount} records!`);
+      } else {
+        alert("Successfully connected, but no records were found or format was not a valid array. Check console for details.");
+      }
+    } catch (error) {
+      console.error("Sync Error:", error);
+      alert("Failed to fetch external cases. Ensure the Google App Script is deployed with 'Execute as: Me' and 'Who has access: Anyone'. Check console for details.");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleLogNewCase = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCaseData.title || !newCaseData.citizenName || !newCaseData.category || !newCaseData.priority) {
+      alert("Please fill out all required fields.");
+      return;
+    }
+
+    setIsSubmitting(true);
     try {
       await addDoc(collection(db, 'cases'), {
-        citizenName: 'Citizen ' + Math.floor(Math.random() * 1000),
-        title: 'New Issue ' + Math.floor(Math.random() * 100),
-        category: ['Infrastructure', 'Education', 'Health', 'Water'][Math.floor(Math.random() * 4)],
+        ...newCaseData,
         status: 'Open',
-        priority: ['Low', 'Medium', 'High'][Math.floor(Math.random() * 3)],
         date: new Date().toISOString().split('T')[0],
-        assigneeName: 'Staff Member',
-        description: 'This is a mock description for the newly created case. It contains details about the issue reported by the citizen.',
+        assigneeName: 'Unassigned',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
+      setIsNewCaseDialogOpen(false);
+      setNewCaseData({ title: '', citizenName: '', category: '', priority: '', description: '' });
     } catch (error) {
       console.error("Error adding case:", error);
+      alert("Failed to log new case.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -109,6 +180,19 @@ export default function Cases() {
     }
   };
 
+  const handleStatusChange = async (newStatus: string) => {
+    if (!selectedCase) return;
+    
+    try {
+      const caseRef = doc(db, 'cases', selectedCase.id);
+      await updateDoc(caseRef, { status: newStatus, updatedAt: new Date().toISOString() });
+      setSelectedCase({ ...selectedCase, status: newStatus });
+    } catch (error) {
+      console.error("Error updating status:", error);
+      alert("Failed to update status.");
+    }
+  };
+
   const filteredCases = casesData.filter(c => 
     c.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.citizenName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -136,8 +220,105 @@ export default function Cases() {
           <p className="text-muted-foreground">Track and manage citizen requests, complaints, and casework.</p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={handleSyncExternalCases} disabled={isSyncing}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} /> 
+            {isSyncing ? 'Syncing...' : 'Sync External Cases'}
+          </Button>
           <Button variant="outline" onClick={handleExport}><Download className="mr-2 h-4 w-4" /> Export CSV</Button>
-          <Button onClick={handleAddMockCase}><Plus className="mr-2 h-4 w-4" /> Log New Case</Button>
+          <Dialog open={isNewCaseDialogOpen} onOpenChange={setIsNewCaseDialogOpen}>
+            <DialogTrigger asChild>
+              <Button><Plus className="mr-2 h-4 w-4" /> Log New Case</Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[500px]">
+              <DialogHeader>
+                <DialogTitle>Log New Case</DialogTitle>
+                <DialogDescription>
+                  Enter the details of the reported issue to create a new case record.
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleLogNewCase}>
+                <div className="grid gap-4 py-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="title">Issue Title</Label>
+                    <Input 
+                      id="title" 
+                      placeholder="e.g., Pothole on Main St" 
+                      value={newCaseData.title}
+                      onChange={(e) => setNewCaseData({...newCaseData, title: e.target.value})}
+                      required
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="citizenName">Citizen Name</Label>
+                    <Input 
+                      id="citizenName" 
+                      placeholder="Name of reporting citizen" 
+                      value={newCaseData.citizenName}
+                      onChange={(e) => setNewCaseData({...newCaseData, citizenName: e.target.value})}
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="category">Category</Label>
+                      <Select 
+                        value={newCaseData.category} 
+                        onValueChange={(val) => setNewCaseData({...newCaseData, category: val})}
+                        required
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Infrastructure">Infrastructure</SelectItem>
+                          <SelectItem value="Education">Education</SelectItem>
+                          <SelectItem value="Health">Health</SelectItem>
+                          <SelectItem value="Water">Water</SelectItem>
+                          <SelectItem value="Security">Security</SelectItem>
+                          <SelectItem value="Other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="priority">Priority</Label>
+                      <Select 
+                        value={newCaseData.priority} 
+                        onValueChange={(val) => setNewCaseData({...newCaseData, priority: val})}
+                        required
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Low">Low</SelectItem>
+                          <SelectItem value="Medium">Medium</SelectItem>
+                          <SelectItem value="High">High</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="description">Description</Label>
+                    <Textarea 
+                      id="description" 
+                      rows={4}
+                      placeholder="Details about the issue..."
+                      value={newCaseData.description}
+                      onChange={(e) => setNewCaseData({...newCaseData, description: e.target.value})}
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setIsNewCaseDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting ? 'Logging...' : 'Log Case'}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
@@ -152,10 +333,10 @@ export default function Cases() {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">In Progress</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Work In Progress</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{casesData.filter(c => c.status === 'In Progress').length}</div>
+            <div className="text-2xl font-bold text-blue-600">{casesData.filter(c => c.status === 'Work In Progress' || c.status === 'In Progress').length}</div>
           </CardContent>
         </Card>
         <Card>
@@ -183,7 +364,7 @@ export default function Cases() {
               <TabsList>
                 <TabsTrigger value="all">All Cases</TabsTrigger>
                 <TabsTrigger value="open">Open</TabsTrigger>
-                <TabsTrigger value="progress">In Progress</TabsTrigger>
+                <TabsTrigger value="progress">Work In Progress</TabsTrigger>
                 <TabsTrigger value="resolved">Resolved</TabsTrigger>
               </TabsList>
             </Tabs>
@@ -252,7 +433,7 @@ export default function Cases() {
                         <div className="flex items-center gap-2">
                           {c.status === 'Resolved' ? (
                             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                          ) : c.status === 'In Progress' ? (
+                          ) : (c.status === 'Work In Progress' || c.status === 'In Progress') ? (
                             <Clock className="h-4 w-4 text-blue-500" />
                           ) : (
                             <AlertTriangle className="h-4 w-4 text-amber-500" />
@@ -297,16 +478,16 @@ export default function Cases() {
               </div>
               <div className="space-y-1">
                 <p className="text-sm font-medium text-muted-foreground flex items-center gap-1"><Clock className="h-4 w-4" /> Status</p>
-                <div className="flex items-center gap-2 font-medium">
-                  {selectedCase?.status === 'Resolved' ? (
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                  ) : selectedCase?.status === 'In Progress' ? (
-                    <Clock className="h-4 w-4 text-blue-500" />
-                  ) : (
-                    <AlertTriangle className="h-4 w-4 text-amber-500" />
-                  )}
-                  {selectedCase?.status}
-                </div>
+                <Select value={selectedCase?.status} onValueChange={handleStatusChange}>
+                  <SelectTrigger className="w-[140px] h-8">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Open">Open</SelectItem>
+                    <SelectItem value="Work In Progress">Work In Progress</SelectItem>
+                    <SelectItem value="Resolved">Resolved</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1">
                 <p className="text-sm font-medium text-muted-foreground flex items-center gap-1"><AlertTriangle className="h-4 w-4" /> Priority</p>
@@ -349,7 +530,22 @@ export default function Cases() {
             </div>
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setSelectedCase(null)}>Close</Button>
-              <Button>Update Case</Button>
+              {selectedCase?.status === 'Open' && (
+                <Button 
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                  onClick={() => handleStatusChange('Work In Progress')}
+                >
+                  <Clock className="mr-2 h-4 w-4" /> Start Work
+                </Button>
+              )}
+              {(selectedCase?.status === 'Work In Progress' || selectedCase?.status === 'In Progress') && (
+                <Button 
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={() => handleStatusChange('Resolved')}
+                >
+                  <CheckCircle2 className="mr-2 h-4 w-4" /> Mark as Resolved
+                </Button>
+              )}
             </div>
           </div>
         </DialogContent>
