@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Plus, Clock, CheckCircle2, AlertTriangle, User, Tag, Calendar, FileText, Download, Trash2, RefreshCw } from 'lucide-react';
+import { Search, Filter, Plus, Clock, CheckCircle2, AlertTriangle, User, Tag, Calendar, FileText, Download, Trash2, RefreshCw, Activity } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -40,6 +40,26 @@ interface Case {
   createdAt: string;
   description?: string;
 }
+
+const getSentimentTag = (description?: string) => {
+  if (!description) return { label: 'Neutral', classes: 'bg-slate-100 text-slate-700 border-slate-200' };
+  
+  const lower = description.toLowerCase();
+  
+  const urgentWords = ['urgent', 'emergency', 'immediate', 'danger', 'hazard', 'critical', 'severe', 'help', 'now'];
+  const frustratedWords = ['angry', 'terrible', 'worst', 'bad', 'broken', 'unacceptable', 'disgusting', 'awful', 'ignored', 'fail', 'waiting', 'pothole', 'ridiculous'];
+  const positiveWords = ['good', 'thanks', 'appreciate', 'great', 'excellent', 'helpful', 'improved', 'happy', 'resolved', 'kudos'];
+  
+  const hasUrgent = urgentWords.some(w => lower.includes(w));
+  const hasFrustrated = frustratedWords.some(w => lower.includes(w));
+  const hasPositive = positiveWords.some(w => lower.includes(w));
+  
+  if (hasUrgent) return { label: 'Urgent Tone', classes: 'bg-red-100 text-red-800 border-red-200' };
+  if (hasFrustrated) return { label: 'Frustrated', classes: 'bg-amber-100 text-amber-800 border-amber-200' };
+  if (hasPositive) return { label: 'Positive', classes: 'bg-emerald-100 text-emerald-800 border-emerald-200' };
+  
+  return { label: 'Neutral', classes: 'bg-slate-100 text-slate-700 border-slate-200' };
+};
 
 export default function Cases() {
   const { role } = useAuth();
@@ -226,8 +246,8 @@ export default function Cases() {
           </Button>
           <Button variant="outline" onClick={handleExport}><Download className="mr-2 h-4 w-4" /> Export CSV</Button>
           <Dialog open={isNewCaseDialogOpen} onOpenChange={setIsNewCaseDialogOpen}>
-            <DialogTrigger asChild>
-              <Button><Plus className="mr-2 h-4 w-4" /> Log New Case</Button>
+            <DialogTrigger render={<Button />}>
+              <Plus className="mr-2 h-4 w-4" /> Log New Case
             </DialogTrigger>
             <DialogContent className="sm:max-w-[500px]">
               <DialogHeader>
@@ -394,6 +414,7 @@ export default function Cases() {
                   <th className="px-4 py-3 font-medium">Citizen</th>
                   <th className="px-4 py-3 font-medium">Issue Title</th>
                   <th className="px-4 py-3 font-medium">Category</th>
+                  <th className="px-4 py-3 font-medium">Sentiment</th>
                   <th className="px-4 py-3 font-medium">Priority</th>
                   <th className="px-4 py-3 font-medium">Status</th>
                   <th className="px-4 py-3 font-medium">Assignee</th>
@@ -403,13 +424,13 @@ export default function Cases() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
+                    <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">
                       Loading cases...
                     </td>
                   </tr>
                 ) : filteredCases.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
+                    <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">
                       No cases found matching your search.
                     </td>
                   </tr>
@@ -424,6 +445,11 @@ export default function Cases() {
                       <td className="px-4 py-3">{c.citizenName}</td>
                       <td className="px-4 py-3 font-medium">{c.title}</td>
                       <td className="px-4 py-3 text-muted-foreground">{c.category}</td>
+                      <td className="px-4 py-3">
+                        <Badge variant="outline" className={`font-normal text-xs ${getSentimentTag(c.description).classes}`}>
+                          {getSentimentTag(c.description).label}
+                        </Badge>
+                      </td>
                       <td className="px-4 py-3">
                         <Badge variant={c.priority === 'High' ? 'destructive' : c.priority === 'Medium' ? 'default' : 'secondary'}>
                           {c.priority}
@@ -509,6 +535,16 @@ export default function Cases() {
               <div className="space-y-1">
                 <p className="text-sm font-medium text-muted-foreground flex items-center gap-1"><User className="h-4 w-4" /> Assignee</p>
                 <p className="font-medium">{selectedCase?.assigneeName}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-muted-foreground flex items-center gap-1"><Activity className="h-4 w-4" /> Detected Tone</p>
+                <p className="font-medium">
+                  {selectedCase && (
+                    <Badge variant="outline" className={`font-normal ${getSentimentTag(selectedCase.description).classes}`}>
+                      {getSentimentTag(selectedCase.description).label}
+                    </Badge>
+                  )}
+                </p>
               </div>
             </div>
 

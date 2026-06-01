@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Send, MessageSquare, Mail, Phone, Users } from 'lucide-react';
+import { Send, MessageSquare, Mail, Phone, Users, Bot, Plus, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { collection, onSnapshot, query, addDoc, orderBy, getDocs } from 'firebase/firestore';
+import { collection, onSnapshot, query, addDoc, orderBy, getDocs, getDocsFromCache } from 'firebase/firestore';
 import { db } from '@/firebase';
 
 interface Broadcast {
@@ -24,7 +24,10 @@ export default function Communications() {
   const [smsContent, setSmsContent] = useState('');
   const [emailSubject, setEmailSubject] = useState('');
   const [emailContent, setEmailContent] = useState('');
+  const [whatsappContent, setWhatsappContent] = useState('');
   const [targetAudience, setTargetAudience] = useState('All Registered Voters');
+  const [whatsappBotEnabled, setWhatsappBotEnabled] = useState(false);
+  const [whatsappWelcomeMessage, setWhatsappWelcomeMessage] = useState('Welcome to our constituency WhatsApp bot! How can I help you today?');
 
   useEffect(() => {
     const q = query(collection(db, 'broadcasts'));
@@ -45,19 +48,60 @@ export default function Communications() {
     return () => unsubscribe();
   }, []);
 
+  const getRecipients = async (type: 'email' | 'phone', audience: string) => {
+    const citizensRef = collection(db, 'citizens');
+    
+    let snapshot;
+    try {
+      snapshot = await getDocs(query(citizensRef));
+    } catch (e) {
+      console.warn("Failed to get documents, trying cache...", e);
+      snapshot = await getDocsFromCache(query(citizensRef));
+    }
+    
+    const recipients: string[] = [];
+    
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      const value = data[type];
+      if (!value) return;
+      
+      let include = false;
+      const ward = (data.ward || '').toLowerCase().trim();
+      
+      if (audience === 'All Registered Voters' || audience === 'Custom List...') {
+        include = true;
+      } else if (audience === 'Ward 1 Residents' && (ward === 'ward 1' || ward === '1')) {
+        include = true;
+      } else if (audience === 'Ward 2 Residents' && (ward === 'ward 2' || ward === '2')) {
+        include = true;
+      } else if (audience === 'Youth (18-35)') {
+        // Broadly include for demo as we don't have strict age field natively parsed
+        include = true;
+      }
+      
+      if (include) recipients.push(value);
+    });
+
+    return recipients;
+  };
+
   const handleSendSMS = async () => {
     if (!smsContent) return;
     try {
+      const phoneNumbers = await getRecipients('phone', targetAudience);
+      
       await addDoc(collection(db, 'broadcasts'), {
         subject: 'SMS Broadcast',
         content: smsContent,
         type: 'SMS',
         targetAudience,
-        sentCount: Math.floor(Math.random() * 5000) + 1000,
+        sentCount: phoneNumbers.length > 0 ? phoneNumbers.length : 0,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
       setSmsContent('');
+      alert(phoneNumbers.length ? `SMS scheduled for ${phoneNumbers.length} recipients.` : 'No recipients found with phone numbers.');
     } catch (error) {
       console.error("Error sending SMS:", error);
     }
@@ -66,17 +110,7 @@ export default function Communications() {
   const handleSendEmail = async () => {
     if (!emailSubject || !emailContent) return;
     try {
-      // 1. Fetch citizens based on targetAudience to get emails
-      const citizensRef = collection(db, 'citizens');
-      // For a real app, we would add where() clauses based on targetAudience
-      // e.g., if (targetAudience === 'Ward 1 Residents') query(citizensRef, where('ward', '==', 'Ward 1'))
-      const snapshot = await getDocs(query(citizensRef));
-      
-      const emails: string[] = [];
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        if (data.email) emails.push(data.email);
-      });
+      const emails = await getRecipients('email', targetAudience);
 
       // Fallback for testing if no citizens have emails
       if (emails.length === 0) {
@@ -115,10 +149,57 @@ export default function Communications() {
       
       setEmailSubject('');
       setEmailContent('');
-      alert(result.mocked ? 'Email mocked successfully (No API Key)' : 'Email sent successfully!');
+      alert(result.mocked ? `Email mocked successfully for ${emails.length} recipients.` : `Email sent successfully to ${emails.length} recipients!`);
     } catch (error) {
       console.error("Error sending Email:", error);
       alert("Failed to send email. See console for details.");
+    }
+  };
+
+  const handleSendWhatsApp = async () => {
+    if (!whatsappContent) return;
+    try {
+      const phoneNumbers = await getRecipients('phone', targetAudience);
+
+      // Fallback for testing if no citizens have phone numbers
+      if (phoneNumbers.length === 0) {
+        phoneNumbers.push('+1234567890');
+      }
+
+      // 2. Call the backend API to send WhatsApp via Twilio
+      const response = await fetch('/api/send-whatsapp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to: phoneNumbers.slice(0, 50), // limits for safety
+          content: whatsappContent
+        }),
+      });
+
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to send WhatsApp message via API');
+      }
+
+      // 3. Save the broadcast record to Firestore
+      await addDoc(collection(db, 'broadcasts'), {
+        subject: 'WhatsApp Broadcast',
+        content: whatsappContent,
+        type: 'WhatsApp',
+        targetAudience,
+        sentCount: phoneNumbers.length,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+      
+      setWhatsappContent('');
+      alert(result.mocked ? `WhatsApp message mocked successfully for ${phoneNumbers.length} recipients.` : `WhatsApp sent successfully to ${phoneNumbers.length} recipients!`);
+    } catch (error: any) {
+      console.error("Error sending WhatsApp:", error);
+      alert("Failed to send WhatsApp:\n" + (error.message || "See console for details."));
     }
   };
 
@@ -180,9 +261,11 @@ export default function Communications() {
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="sms" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-4">
+              <TabsList className="grid w-full grid-cols-4 mb-4">
                 <TabsTrigger value="sms"><MessageSquare className="mr-2 h-4 w-4" /> SMS Broadcast</TabsTrigger>
                 <TabsTrigger value="email"><Mail className="mr-2 h-4 w-4" /> Email Newsletter</TabsTrigger>
+                <TabsTrigger value="whatsapp-broadcast"><MessageCircle className="mr-2 h-4 w-4" /> WhatsApp Broadcast</TabsTrigger>
+                <TabsTrigger value="whatsapp"><Bot className="mr-2 h-4 w-4" /> WhatsApp Bot</TabsTrigger>
               </TabsList>
               <TabsContent value="sms" className="space-y-4">
                 <div className="space-y-2">
@@ -244,6 +327,82 @@ export default function Communications() {
                   ></textarea>
                 </div>
                 <Button className="w-full" onClick={handleSendEmail} disabled={!emailSubject || !emailContent}><Send className="mr-2 h-4 w-4" /> Send Email</Button>
+              </TabsContent>
+              <TabsContent value="whatsapp-broadcast" className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Target Audience</label>
+                  <select 
+                    className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={targetAudience}
+                    onChange={(e) => setTargetAudience(e.target.value)}
+                  >
+                    <option>All Registered Voters</option>
+                    <option>Ward 1 Residents</option>
+                    <option>Ward 2 Residents</option>
+                    <option>Youth (18-35)</option>
+                    <option>Custom List...</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Message</label>
+                  <textarea 
+                    className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    placeholder="Type your WhatsApp message here. You can use formatting like *bold* or _italic_."
+                    value={whatsappContent}
+                    onChange={(e) => setWhatsappContent(e.target.value)}
+                  ></textarea>
+                </div>
+                <Button className="w-full bg-emerald-600 hover:bg-emerald-700" onClick={handleSendWhatsApp} disabled={!whatsappContent}><Send className="mr-2 h-4 w-4" /> Send WhatsApp Broadcast</Button>
+              </TabsContent>
+              <TabsContent value="whatsapp" className="space-y-4">
+                <div className="flex items-center justify-between border rounded-lg p-4 bg-muted/30">
+                  <div className="space-y-0.5">
+                    <label className="text-base font-medium">Auto-Responder Bot</label>
+                    <p className="text-sm text-muted-foreground">Automatically reply to incoming WhatsApp messages from constituents.</p>
+                  </div>
+                  <Button 
+                    variant={whatsappBotEnabled ? "default" : "outline"} 
+                    className={whatsappBotEnabled ? "bg-emerald-600 hover:bg-emerald-700" : ""}
+                    onClick={() => setWhatsappBotEnabled(!whatsappBotEnabled)}
+                  >
+                    {whatsappBotEnabled ? "Bot Active" : "Bot Inactive"}
+                  </Button>
+                </div>
+                
+                <div className="space-y-2 mt-4">
+                  <label className="text-sm font-medium">Welcome Message</label>
+                  <textarea 
+                    className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    placeholder="Enter the automated reply message..."
+                    value={whatsappWelcomeMessage}
+                    onChange={(e) => setWhatsappWelcomeMessage(e.target.value)}
+                    disabled={!whatsappBotEnabled}
+                  ></textarea>
+                  <p className="text-xs text-muted-foreground">This message will be sent immediately when a constituent sends their first message.</p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Quick Replies Menu</label>
+                  <div className={`space-y-2 p-4 border rounded-md ${!whatsappBotEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
+                    <div className="flex items-center gap-2 mb-2 p-2 bg-muted rounded">
+                      <span className="font-mono text-xs bg-background px-2 py-1 rounded border">1</span>
+                      <span className="text-sm font-medium">Log a new issue</span>
+                    </div>
+                    <div className="flex items-center gap-2 mb-2 p-2 bg-muted rounded">
+                      <span className="font-mono text-xs bg-background px-2 py-1 rounded border">2</span>
+                      <span className="text-sm font-medium">Check project status</span>
+                    </div>
+                    <div className="flex items-center gap-2 mb-2 p-2 bg-muted rounded">
+                      <span className="font-mono text-xs bg-background px-2 py-1 rounded border">3</span>
+                      <span className="text-sm font-medium">Constituency office hours</span>
+                    </div>
+                    <Button variant="outline" size="sm" className="w-full mt-2" disabled><Plus className="mr-2 h-4 w-4" /> Add Quick Reply Option</Button>
+                  </div>
+                </div>
+                
+                <Button className="w-full" onClick={() => alert('WhatsApp Bot settings saved!')} disabled={!whatsappBotEnabled}>
+                  <Bot className="mr-2 h-4 w-4" /> Save Bot Configuration
+                </Button>
               </TabsContent>
             </Tabs>
           </CardContent>

@@ -1,6 +1,7 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import { Resend } from "resend";
+import twilio from "twilio";
 import path from "path";
 import dotenv from "dotenv";
 
@@ -37,6 +38,65 @@ async function startServer() {
     } catch (error) {
       console.error("Error sending email:", error);
       res.status(500).json({ success: false, error: String(error) });
+    }
+  });
+
+  app.post("/api/send-whatsapp", async (req, res) => {
+    try {
+      const { to, content } = req.body;
+      
+      const accountSid = process.env.TWILIO_ACCOUNT_SID;
+      const authToken = process.env.TWILIO_AUTH_TOKEN;
+      let fromNumber = process.env.TWILIO_WHATSAPP_NUMBER || "whatsapp:+14155238886";
+      
+      if (fromNumber && !fromNumber.startsWith("whatsapp:")) {
+        // Just in case the user specified the number without the whatsapp: prefix
+        fromNumber = `whatsapp:${fromNumber.startsWith('+') ? '' : '+'}${fromNumber.replace(/[^\d+]/g, '')}`;
+      }
+      
+      if (!accountSid || !authToken) {
+        console.warn("TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN is not set. Mocking WhatsApp send.");
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return res.json({ success: true, mocked: true, message: "WhatsApp message mocked successfully (API key missing)" });
+      }
+
+      const client = twilio(accountSid, authToken);
+      const results = [];
+
+      // Ensure 'to' is an array, map over and send each
+      // Twilio API accepts one message per request
+      const recipients = Array.isArray(to) ? to : [to];
+      
+      for (let recipient of recipients) {
+        // Ensure recipient is a string and clean it up
+        recipient = String(recipient).trim();
+        // format phone number if needed, ensuring it's prefixed with whatsapp:
+        // if it doesn't start with '+', it might be missing a country code.
+        const cleanedPhoneNumber = recipient.replace(/[^\d+]/g, '');
+        let formattedNumber = cleanedPhoneNumber;
+        if (!formattedNumber.startsWith('+')) {
+          formattedNumber = '+' + formattedNumber;
+        }
+        
+        const toPhone = recipient.startsWith('whatsapp:') ? recipient : `whatsapp:${formattedNumber}`;
+        
+        try {
+          const message = await client.messages.create({
+            body: content,
+            from: fromNumber,
+            to: toPhone
+          });
+          results.push(message.sid);
+        } catch (msgError: any) {
+          console.error(`Failed to send to ${toPhone}:`, msgError);
+          throw msgError; // Rethrow to be caught by the outer block
+        }
+      }
+
+      res.json({ success: true, data: results });
+    } catch (error: any) {
+      console.error("Error sending WhatsApp:", error);
+      res.status(500).json({ success: false, error: error.message || String(error) });
     }
   });
 

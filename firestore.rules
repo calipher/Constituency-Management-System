@@ -55,6 +55,11 @@ service cloud.firestore {
     // Rules
     // ===============================================================
 
+    match /settings/{documentId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
     match /users/{userId} {
       allow read: if isAuthenticated();
       // Allow user to create their own profile if they are the default admin, or if an admin creates it

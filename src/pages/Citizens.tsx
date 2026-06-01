@@ -13,6 +13,23 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { collection, onSnapshot, query, addDoc, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '@/firebase';
 import { exportToCSV } from '@/lib/exportUtils';
@@ -38,6 +55,17 @@ export default function Citizens() {
   const [isImporting, setIsImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [isAddCitizenDialogOpen, setIsAddCitizenDialogOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [newCitizenData, setNewCitizenData] = useState({
+    name: '',
+    idNumber: '',
+    email: '',
+    ward: '',
+    phone: '',
+    status: 'Registered Voter'
+  });
+
   useEffect(() => {
     const q = query(collection(db, 'citizens'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -55,22 +83,35 @@ export default function Citizens() {
     return () => unsubscribe();
   }, []);
 
-  const handleAddMockCitizen = async () => {
+  const handleAddCitizen = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCitizenData.name || !newCitizenData.idNumber || !newCitizenData.ward) {
+      alert("Please fill out all required fields (Name, ID Number, Ward).");
+      return;
+    }
+
+    setIsSubmitting(true);
     try {
-      const randNum = Math.floor(Math.random() * 1000);
       await addDoc(collection(db, 'citizens'), {
-        name: 'New Citizen ' + randNum,
-        idNumber: Math.floor(Math.random() * 100000000).toString(),
-        email: `citizen${randNum}@example.com`,
-        ward: 'Ward ' + (Math.floor(Math.random() * 5) + 1),
-        phone: '+263 7' + Math.floor(Math.random() * 100000000),
-        status: 'Registered Voter',
+        ...newCitizenData,
         lastContact: new Date().toISOString().split('T')[0],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
+      setNewCitizenData({
+        name: '',
+        idNumber: '',
+        email: '',
+        ward: '',
+        phone: '',
+        status: 'Registered Voter'
+      });
+      setIsAddCitizenDialogOpen(false);
     } catch (error) {
       console.error("Error adding citizen:", error);
+      alert("Failed to add citizen.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -192,7 +233,67 @@ export default function Citizens() {
             {isImporting ? 'Importing...' : 'Import CSV'}
           </Button>
           <Button variant="outline" onClick={handleExport}><Download className="mr-2 h-4 w-4" /> Export CSV</Button>
-          <Button onClick={handleAddMockCitizen}><Plus className="mr-2 h-4 w-4" /> Add Citizen</Button>
+          <Dialog open={isAddCitizenDialogOpen} onOpenChange={setIsAddCitizenDialogOpen}>
+            <DialogTrigger render={<Button />}>
+              <Plus className="mr-2 h-4 w-4" /> Add Citizen
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[500px]">
+              <DialogHeader>
+                <DialogTitle>Add New Citizen</DialogTitle>
+                <DialogDescription>
+                  Enter the citizen's details manually.
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleAddCitizen}>
+                <div className="grid gap-4 py-4">
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="name" className="text-right">Name *</Label>
+                    <Input id="name" value={newCitizenData.name} onChange={(e) => setNewCitizenData({...newCitizenData, name: e.target.value})} className="col-span-3" required />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="idNumber" className="text-right">ID Number *</Label>
+                    <Input id="idNumber" value={newCitizenData.idNumber} onChange={(e) => setNewCitizenData({...newCitizenData, idNumber: e.target.value})} className="col-span-3" required />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="email" className="text-right">Email</Label>
+                    <Input id="email" type="email" value={newCitizenData.email} onChange={(e) => setNewCitizenData({...newCitizenData, email: e.target.value})} className="col-span-3" />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="phone" className="text-right">Phone</Label>
+                    <Input id="phone" value={newCitizenData.phone} onChange={(e) => setNewCitizenData({...newCitizenData, phone: e.target.value})} className="col-span-3" />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="ward" className="text-right">Ward *</Label>
+                    <Input id="ward" value={newCitizenData.ward} onChange={(e) => setNewCitizenData({...newCitizenData, ward: e.target.value})} className="col-span-3" required />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="status" className="text-right">Status</Label>
+                    <div className="col-span-3">
+                      <Select value={newCitizenData.status} onValueChange={(val) => setNewCitizenData({...newCitizenData, status: val})}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Registered Voter">Registered Voter</SelectItem>
+                          <SelectItem value="Not Registered">Not Registered</SelectItem>
+                          <SelectItem value="Pending">Pending</SelectItem>
+                          <SelectItem value="Unknown">Unknown</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setIsAddCitizenDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting ? 'Saving...' : 'Save Citizen'}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
