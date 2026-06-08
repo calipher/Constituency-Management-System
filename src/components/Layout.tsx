@@ -17,7 +17,8 @@ import {
   Shield,
   Sun,
   Moon,
-  Check
+  Check,
+  Smartphone
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -47,6 +48,7 @@ const navigation = [
   { name: 'Communications', href: '/communications', icon: MessageSquare },
   { name: 'Events', href: '/events', icon: Calendar },
   { name: 'Documents', href: '/documents', icon: FileText },
+  { name: 'Mobile Capture', href: '/capture', icon: Smartphone },
 ];
 
 export default function Layout() {
@@ -131,6 +133,22 @@ export default function Layout() {
     <>
       {navigation.map((item) => {
         const isActive = location.pathname === item.href;
+        
+        if (item.href === '/capture') {
+          return (
+            <a
+              key={item.name}
+              href={item.href}
+              target="_blank"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <item.icon className="h-5 w-5" />
+              <span className="font-medium">{item.name}</span>
+            </a>
+          );
+        }
+
         return (
           <Link
             key={item.name}

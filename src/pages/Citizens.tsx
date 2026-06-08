@@ -264,7 +264,17 @@ export default function Citizens() {
                   </div>
                   <div className="grid grid-cols-4 items-center gap-4">
                     <Label htmlFor="ward" className="text-right">Ward *</Label>
-                    <Input id="ward" value={newCitizenData.ward} onChange={(e) => setNewCitizenData({...newCitizenData, ward: e.target.value})} className="col-span-3" required />
+                    <div className="col-span-3">
+                      <Select value={newCitizenData.ward} onValueChange={(val) => setNewCitizenData({...newCitizenData, ward: val})}>
+                        <SelectTrigger id="ward">
+                          <SelectValue placeholder="Select Ward" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Ward 22">Ward 22</SelectItem>
+                          <SelectItem value="Ward 23">Ward 23</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                   <div className="grid grid-cols-4 items-center gap-4">
                     <Label htmlFor="status" className="text-right">Status</Label>

@@ -1,0 +1,9 @@
+{
+	"appId": "com.constituencyos.capture",
+	"appName": "Mobile Capture",
+	"webDir": "dist",
+	"server": {
+		"url": "https://ais-pre-jhbmotevnfmbp5knvxiwem-465097020990.europe-west2.run.app/capture",
+		"cleartext": true
+	}
+}

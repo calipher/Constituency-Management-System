@@ -71,9 +71,9 @@ export default function Communications() {
       
       if (audience === 'All Registered Voters' || audience === 'Custom List...') {
         include = true;
-      } else if (audience === 'Ward 1 Residents' && (ward === 'ward 1' || ward === '1')) {
+      } else if (audience === 'Ward 22 Residents' && (ward === 'ward 22' || ward === '22')) {
         include = true;
-      } else if (audience === 'Ward 2 Residents' && (ward === 'ward 2' || ward === '2')) {
+      } else if (audience === 'Ward 23 Residents' && (ward === 'ward 23' || ward === '23')) {
         include = true;
       } else if (audience === 'Youth (18-35)') {
         // Broadly include for demo as we don't have strict age field natively parsed
@@ -276,8 +276,8 @@ export default function Communications() {
                     onChange={(e) => setTargetAudience(e.target.value)}
                   >
                     <option>All Registered Voters</option>
-                    <option>Ward 1 Residents</option>
-                    <option>Ward 2 Residents</option>
+                    <option>Ward 22 Residents</option>
+                    <option>Ward 23 Residents</option>
                     <option>Youth (18-35)</option>
                     <option>Custom List...</option>
                   </select>
@@ -303,8 +303,8 @@ export default function Communications() {
                     onChange={(e) => setTargetAudience(e.target.value)}
                   >
                     <option>All Registered Voters</option>
-                    <option>Ward 1 Residents</option>
-                    <option>Ward 2 Residents</option>
+                    <option>Ward 22 Residents</option>
+                    <option>Ward 23 Residents</option>
                     <option>Youth (18-35)</option>
                     <option>Custom List...</option>
                   </select>
@@ -337,8 +337,8 @@ export default function Communications() {
                     onChange={(e) => setTargetAudience(e.target.value)}
                   >
                     <option>All Registered Voters</option>
-                    <option>Ward 1 Residents</option>
-                    <option>Ward 2 Residents</option>
+                    <option>Ward 22 Residents</option>
+                    <option>Ward 23 Residents</option>
                     <option>Youth (18-35)</option>
                     <option>Custom List...</option>
                   </select>

@@ -1,4 +1,5 @@
 import express from "express";
+import helmet from "helmet";
 import { createServer as createViteServer } from "vite";
 import { Resend } from "resend";
 import twilio from "twilio";
@@ -9,9 +10,68 @@ dotenv.config();
 
 async function startServer() {
   const app = express();
+  app.disable("x-powered-by");
   const PORT = 3000;
 
-  app.use(express.json());
+  // Implement Content Security Policy (CSP) using Helmet
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: [
+            "'self'",
+            "'unsafe-inline'", // Required for Vite dev server / React
+            "'unsafe-eval'",   // Required for some DevTools and Vite
+            "https://apis.google.com",
+            "https://www.gstatic.com",
+            "https://*.firebaseapp.com",
+          ],
+          styleSrc: [
+            "'self'",
+            "'unsafe-inline'", // Required for Tailwind/Vite injected styles
+            "https://fonts.googleapis.com",
+          ],
+          fontSrc: [
+            "'self'",
+            "https://fonts.gstatic.com",
+            "data:",
+          ],
+          imgSrc: [
+            "'self'",
+            "data:",
+            "https://*",
+            "blob:",
+          ],
+          connectSrc: [
+            "'self'",
+            "ws:",
+            "wss:", // For Vite HMR
+            "https://firestore.googleapis.com",
+            "https://identitytoolkit.googleapis.com",
+            "https://securetoken.googleapis.com",
+            "https://*.firebaseio.com",
+          ],
+          frameSrc: [
+            "'self'",
+            "https://*.firebaseapp.com",
+          ],
+          frameAncestors: [
+            "'self'",
+            "https://ai.studio",
+            "https://*.ai.studio",
+            "https://aistudio.google.com",
+            "https://*.aistudio.google.com",
+            "*"
+          ],
+        },
+      },
+      // Disable X-Frame-Options in favor of CSP frame-ancestors
+      frameguard: false,
+    })
+  );
+
+  app.use(express.json({ limit: "50mb" }));
 
   // API routes FIRST
   app.post("/api/send-email", async (req, res) => {

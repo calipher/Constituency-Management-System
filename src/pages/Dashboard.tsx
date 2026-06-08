@@ -6,7 +6,8 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock,
-  Plus
+  Plus,
+  Smartphone
 } from 'lucide-react';
 import { 
   Card, 
@@ -173,7 +174,11 @@ export default function Dashboard() {
           <h1 className="text-3xl font-bold tracking-tight">Executive Dashboard</h1>
           <p className="text-muted-foreground">Overview of constituency metrics, cases, and projects.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => window.open('/capture', '_blank', 'noopener,noreferrer')}>
+            <Smartphone className="mr-2 h-4 w-4" />
+            Launch Mobile App
+          </Button>
           <Button variant="outline">Download Report</Button>
           <Dialog open={isNewCaseDialogOpen} onOpenChange={setIsNewCaseDialogOpen}>
             <DialogTrigger render={<Button><Plus className="mr-2 h-4 w-4" /> New Case</Button>} />

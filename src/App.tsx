@@ -16,6 +16,8 @@ import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
 
+import MobileCapture from './pages/MobileCapture';
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading, signIn, signInWithEmail } = useAuth();
   const [email, setEmail] = useState('');
@@ -83,6 +85,7 @@ export default function App() {
       <AuthProvider>
         <Router>
           <Routes>
+            <Route path="/capture" element={<ProtectedRoute><MobileCapture /></ProtectedRoute>} />
             <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
               <Route index element={<Dashboard />} />
               <Route path="citizens" element={<Citizens />} />

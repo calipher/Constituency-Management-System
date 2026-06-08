@@ -13,6 +13,8 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.4.0",
+    "@capacitor/android": "^8.4.0",
+    "@capacitor/core": "^8.4.0",
     "@fontsource-variable/geist": "^5.2.8",
     "@google/genai": "^1.29.0",
     "@tailwindcss/vite": "^4.1.14",
@@ -23,6 +25,7 @@
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "firebase": "^12.12.0",
+    "helmet": "^8.2.0",
     "leaflet": "^1.9.4",
     "leaflet.heat": "^0.2.0",
     "lucide-react": "^0.546.0",
@@ -40,6 +43,7 @@
     "vite": "^6.2.0"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.4.0",
     "@types/express": "^4.17.21",
     "@types/leaflet": "^1.9.21",
     "@types/leaflet.heat": "^0.2.5",
