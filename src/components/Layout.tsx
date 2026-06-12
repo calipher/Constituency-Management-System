@@ -18,7 +18,8 @@ import {
   Sun,
   Moon,
   Check,
-  Smartphone
+  Smartphone,
+  Activity
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -166,18 +167,32 @@ export default function Layout() {
         );
       })}
       {role === 'admin' && (
-        <Link
-          to="/users"
-          onClick={() => setIsMobileMenuOpen(false)}
-          className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${
-            location.pathname === '/users'
-              ? 'bg-primary text-primary-foreground' 
-              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-          }`}
-        >
-          <Shield className="h-5 w-5" />
-          <span className="font-medium">User Management</span>
-        </Link>
+        <>
+          <Link
+            to="/users"
+            onClick={() => setIsMobileMenuOpen(false)}
+            className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${
+              location.pathname === '/users'
+                ? 'bg-primary text-primary-foreground' 
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+            }`}
+          >
+            <Shield className="h-5 w-5" />
+            <span className="font-medium">User Management</span>
+          </Link>
+          <Link
+            to="/audit-logs"
+            onClick={() => setIsMobileMenuOpen(false)}
+            className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${
+              location.pathname === '/audit-logs'
+                ? 'bg-primary text-primary-foreground' 
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+            }`}
+          >
+            <Activity className="h-5 w-5" />
+            <span className="font-medium">Audit Logs</span>
+          </Link>
+        </>
       )}
     </>
   );

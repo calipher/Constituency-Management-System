@@ -30,10 +30,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { collection, onSnapshot, query, addDoc, deleteDoc, doc } from 'firebase/firestore';
+import { collection, onSnapshot, query, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/firebase';
 import { exportToCSV } from '@/lib/exportUtils';
 import { useAuth } from '@/contexts/AuthContext';
+import { logAudit } from '@/lib/auditUtils';
 
 interface Citizen {
   id: string;
@@ -48,7 +49,7 @@ interface Citizen {
 }
 
 export default function Citizens() {
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [citizensData, setCitizensData] = useState<Citizen[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,6 +66,9 @@ export default function Citizens() {
     phone: '',
     status: 'Registered Voter'
   });
+  
+  const [selectedCitizen, setSelectedCitizen] = useState<Citizen | null>(null);
+  const [editingCitizen, setEditingCitizen] = useState<Citizen | null>(null);
 
   useEffect(() => {
     const q = query(collection(db, 'citizens'));
@@ -98,6 +102,14 @@ export default function Citizens() {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
+      await logAudit({
+        action: 'Add Citizen',
+        category: 'Citizens',
+        details: `Added new citizen: ${newCitizenData.name} (${newCitizenData.idNumber})`,
+        userId: user?.uid || 'unknown',
+        userName: user?.displayName || 'Unknown User',
+        userEmail: user?.email || 'unknown@example.com'
+      });
       setNewCitizenData({
         name: '',
         idNumber: '',
@@ -115,13 +127,51 @@ export default function Citizens() {
     }
   };
 
-  const handleDeleteCitizen = async (id: string) => {
-    if (!window.confirm("Are you sure you want to delete this citizen?")) return;
+  const handleDeleteCitizen = async (citizen: Citizen) => {
     try {
-      await deleteDoc(doc(db, 'citizens', id));
+      if (!window.confirm(`Are you sure you want to delete ${citizen.name}?`)) return;
+      await deleteDoc(doc(db, 'citizens', citizen.id));
+      await logAudit({
+        action: 'Delete Citizen',
+        category: 'Citizens',
+        details: `Deleted citizen: ${citizen.name} (${citizen.idNumber})`,
+        userId: user?.uid || 'unknown',
+        userName: user?.displayName || 'Unknown User',
+        userEmail: user?.email || 'unknown@example.com'
+      });
     } catch (error) {
       console.error("Error deleting citizen:", error);
-      alert("Failed to delete citizen.");
+    }
+  };
+
+  const handleUpdateCitizen = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCitizen) return;
+    setIsSubmitting(true);
+    try {
+      const citizenRef = doc(db, 'citizens', editingCitizen.id);
+      await updateDoc(citizenRef, {
+        name: editingCitizen.name,
+        idNumber: editingCitizen.idNumber,
+        email: editingCitizen.email || '',
+        ward: editingCitizen.ward,
+        phone: editingCitizen.phone || '',
+        status: editingCitizen.status,
+        updatedAt: new Date().toISOString()
+      });
+      await logAudit({
+        action: 'Update Citizen',
+        category: 'Citizens',
+        details: `Updated details for citizen: ${editingCitizen.name}`,
+        userId: user?.uid || 'unknown',
+        userName: user?.displayName || 'Unknown User',
+        userEmail: user?.email || 'unknown@example.com'
+      });
+      setEditingCitizen(null);
+    } catch (error) {
+      console.error("Error updating citizen:", error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -387,24 +437,20 @@ export default function Citizens() {
                           <DropdownMenuContent align="end">
                             <DropdownMenuGroup>
                               <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                              <DropdownMenuItem>View Profile</DropdownMenuItem>
-                              <DropdownMenuItem>Edit Details</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => setSelectedCitizen(citizen)}>View Profile</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => setEditingCitizen(citizen)}>Edit Details</DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem>
                                 <Mail className="mr-2 h-4 w-4" /> Send SMS
                               </DropdownMenuItem>
                               <DropdownMenuItem>Log Case</DropdownMenuItem>
-                              {role === 'admin' ? (
-                                <React.Fragment>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem 
-                                    className="text-destructive focus:text-destructive"
-                                    onClick={() => handleDeleteCitizen(citizen.id)}
-                                  >
-                                    <Trash2 className="mr-2 h-4 w-4" /> Delete Citizen
-                                  </DropdownMenuItem>
-                                </React.Fragment>
-                              ) : null}
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem 
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => handleDeleteCitizen(citizen)}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" /> Delete Citizen
+                              </DropdownMenuItem>
                             </DropdownMenuGroup>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -426,6 +472,149 @@ export default function Citizens() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={!!selectedCitizen} onOpenChange={(open) => !open && setSelectedCitizen(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>View Profile</DialogTitle>
+            <DialogDescription>
+              Detailed information about the citizen.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedCitizen && (
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium text-muted-foreground">Full Name</h4>
+                <p className="text-lg font-semibold">{selectedCitizen.name}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium text-muted-foreground">ID Number</h4>
+                  <p>{selectedCitizen.idNumber}</p>
+                </div>
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium text-muted-foreground">Status</h4>
+                  <Badge 
+                    variant={
+                      selectedCitizen.status === 'Registered Voter' ? 'default' : 
+                      selectedCitizen.status === 'Unregistered' ? 'secondary' : 'destructive'
+                    }
+                  >
+                    {selectedCitizen.status}
+                  </Badge>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium text-muted-foreground">Ward</h4>
+                <p>{selectedCitizen.ward}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium text-muted-foreground">Phone</h4>
+                  <p>{selectedCitizen.phone || 'N/A'}</p>
+                </div>
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium text-muted-foreground">Email</h4>
+                  <p>{selectedCitizen.email || 'N/A'}</p>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setSelectedCitizen(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editingCitizen} onOpenChange={(open) => !open && setEditingCitizen(null)}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Edit Profile</DialogTitle>
+            <DialogDescription>
+              Update the citizen's details.
+            </DialogDescription>
+          </DialogHeader>
+          {editingCitizen && (
+            <form onSubmit={handleUpdateCitizen}>
+              <div className="grid gap-4 py-4">
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="edit-name">Full Name *</Label>
+                  <Input 
+                    id="edit-name" 
+                    value={editingCitizen.name}
+                    onChange={(e) => setEditingCitizen({...editingCitizen, name: e.target.value})}
+                    required
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="edit-idNumber">ID Number *</Label>
+                    <Input 
+                      id="edit-idNumber" 
+                      value={editingCitizen.idNumber}
+                      onChange={(e) => setEditingCitizen({...editingCitizen, idNumber: e.target.value})}
+                      required
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="edit-ward">Ward *</Label>
+                    <Select value={editingCitizen.ward} onValueChange={(v) => setEditingCitizen({...editingCitizen, ward: v})}>
+                      <SelectTrigger id="edit-ward">
+                        <SelectValue placeholder="Select ward" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Ward 1">Ward 1</SelectItem>
+                        <SelectItem value="Ward 2">Ward 2</SelectItem>
+                        <SelectItem value="Ward 3">Ward 3</SelectItem>
+                        <SelectItem value="Ward 4">Ward 4</SelectItem>
+                        <SelectItem value="Ward 5">Ward 5</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="edit-phone">Phone Number</Label>
+                    <Input 
+                      id="edit-phone" 
+                      value={editingCitizen.phone}
+                      onChange={(e) => setEditingCitizen({...editingCitizen, phone: e.target.value})}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="edit-status">Status</Label>
+                    <Select value={editingCitizen.status} onValueChange={(v) => setEditingCitizen({...editingCitizen, status: v})}>
+                      <SelectTrigger id="edit-status">
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Registered Voter">Registered Voter</SelectItem>
+                        <SelectItem value="Unregistered">Unregistered</SelectItem>
+                        <SelectItem value="Needs Assistance">Needs Assistance</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="edit-email">Email Address</Label>
+                  <Input 
+                    id="edit-email" 
+                    type="email"
+                    value={editingCitizen.email}
+                    onChange={(e) => setEditingCitizen({...editingCitizen, email: e.target.value})}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setEditingCitizen(null)}>Cancel</Button>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? 'Saving...' : 'Save Changes'}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

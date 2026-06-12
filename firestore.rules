@@ -69,26 +69,26 @@ service cloud.firestore {
     }
 
     match /citizens/{citizenId} {
-      allow read: if isStaffOrAdmin();
+      allow read: if true;
       allow create, update: if isStaffOrAdmin() && hasRequiredFields(['idNumber', 'name', 'ward', 'status', 'createdAt']);
       allow delete: if isAdmin();
     }
 
     match /cases/{caseId} {
-      allow read: if isStaffOrAdmin();
+      allow read: if true;
       allow create, update: if isStaffOrAdmin() && hasRequiredFields(['citizenName', 'title', 'category', 'status', 'priority', 'createdAt']);
       allow delete: if isAdmin();
     }
 
     match /projects/{projectId} {
-      allow read: if isStaffOrAdmin();
+      allow read: if true;
       allow create, update, delete: if isAdmin();
     }
 
     match /events/{eventId} {
       allow read: if isStaffOrAdmin();
       allow create, update: if isStaffOrAdmin() && hasRequiredFields(['title', 'date', 'time', 'location', 'type', 'createdAt']);
-      allow delete: if isAdmin();
+      allow delete: if isStaffOrAdmin();
     }
 
     match /documents/{documentId} {
@@ -112,6 +112,12 @@ service cloud.firestore {
       allow create: if isStaffOrAdmin() && hasRequiredFields(['userId', 'title', 'message', 'read', 'createdAt']);
       allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
       allow delete: if isAdmin();
+    }
+
+    match /auditLogs/{logId} {
+      allow read: if isStaffOrAdmin();
+      allow create: if isStaffOrAdmin() && hasRequiredFields(['action', 'category', 'details', 'userId', 'userName', 'createdAt']);
+      allow update, delete: if false; // Audit logs should be immutable
     }
   }
 }

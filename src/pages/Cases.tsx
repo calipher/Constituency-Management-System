@@ -27,6 +27,7 @@ import { collection, onSnapshot, query, addDoc, deleteDoc, doc, updateDoc } from
 import { db } from '@/firebase';
 import { exportToCSV } from '@/lib/exportUtils';
 import { useAuth } from '@/contexts/AuthContext';
+import { logAudit } from '@/lib/auditUtils';
 
 interface Case {
   id: string;
@@ -62,8 +63,9 @@ const getSentimentTag = (description?: string) => {
 };
 
 export default function Cases() {
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all');
   const [casesData, setCasesData] = useState<Case[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCase, setSelectedCase] = useState<Case | null>(null);
@@ -153,13 +155,21 @@ export default function Cases() {
 
     setIsSubmitting(true);
     try {
-      await addDoc(collection(db, 'cases'), {
+      const docRef = await addDoc(collection(db, 'cases'), {
         ...newCaseData,
         status: 'Open',
         date: new Date().toISOString().split('T')[0],
         assigneeName: 'Unassigned',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
+      });
+      await logAudit({
+        action: 'Log Case',
+        category: 'Cases',
+        details: `Logged new case: ${newCaseData.title} by ${newCaseData.citizenName}`,
+        userId: user?.uid || 'unknown',
+        userName: user?.displayName || 'Unknown User',
+        userEmail: user?.email || 'unknown@example.com'
       });
       setIsNewCaseDialogOpen(false);
       setNewCaseData({ title: '', citizenName: '', category: '', priority: '', description: '' });
@@ -171,10 +181,18 @@ export default function Cases() {
     }
   };
 
-  const handleDeleteCase = async (id: string) => {
+  const handleDeleteCase = async (caseObj: Case) => {
     if (!window.confirm("Are you sure you want to delete this case?")) return;
     try {
-      await deleteDoc(doc(db, 'cases', id));
+      await deleteDoc(doc(db, 'cases', caseObj.id));
+      await logAudit({
+        action: 'Delete Case',
+        category: 'Cases',
+        details: `Deleted case: ${caseObj.title}`,
+        userId: user?.uid || 'unknown',
+        userName: user?.displayName || 'Unknown User',
+        userEmail: user?.email || 'unknown@example.com'
+      });
       setSelectedCase(null);
     } catch (error) {
       console.error("Error deleting case:", error);
@@ -193,6 +211,14 @@ export default function Cases() {
     try {
       const caseRef = doc(db, 'cases', selectedCase.id);
       await updateDoc(caseRef, { priority: newPriority, updatedAt: new Date().toISOString() });
+      await logAudit({
+        action: 'Update Case Priority',
+        category: 'Cases',
+        details: `Changed priority of case "${selectedCase.title}" to ${newPriority}`,
+        userId: user?.uid || 'unknown',
+        userName: user?.displayName || 'Unknown User',
+        userEmail: user?.email || 'unknown@example.com'
+      });
       setSelectedCase({ ...selectedCase, priority: newPriority });
     } catch (error) {
       console.error("Error updating priority:", error);
@@ -206,6 +232,14 @@ export default function Cases() {
     try {
       const caseRef = doc(db, 'cases', selectedCase.id);
       await updateDoc(caseRef, { status: newStatus, updatedAt: new Date().toISOString() });
+      await logAudit({
+        action: 'Update Case Status',
+        category: 'Cases',
+        details: `Changed status of case "${selectedCase.title}" to ${newStatus}`,
+        userId: user?.uid || 'unknown',
+        userName: user?.displayName || 'Unknown User',
+        userEmail: user?.email || 'unknown@example.com'
+      });
       setSelectedCase({ ...selectedCase, status: newStatus });
     } catch (error) {
       console.error("Error updating status:", error);
@@ -213,11 +247,19 @@ export default function Cases() {
     }
   };
 
-  const filteredCases = casesData.filter(c => 
-    c.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.citizenName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.id.includes(searchTerm)
-  );
+  const filteredCases = casesData.filter(c => {
+    const matchesSearch = c.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          c.citizenName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          c.id.includes(searchTerm);
+    if (!matchesSearch) return false;
+    
+    if (filterStatus === 'all') return true;
+    if (filterStatus === 'open') return c.status === 'Open';
+    if (filterStatus === 'progress') return c.status === 'Work In Progress' || c.status === 'In Progress';
+    if (filterStatus === 'resolved') return c.status === 'Resolved';
+    
+    return true;
+  });
 
   const handleExport = () => {
     exportToCSV('cases.csv', filteredCases, [
@@ -380,7 +422,7 @@ export default function Cases() {
       <Card>
         <CardHeader className="pb-3">
           <div className="flex flex-col md:flex-row justify-between gap-4">
-            <Tabs defaultValue="all" className="w-[400px]">
+            <Tabs value={filterStatus} onValueChange={setFilterStatus} className="w-[400px]">
               <TabsList>
                 <TabsTrigger value="all">All Cases</TabsTrigger>
                 <TabsTrigger value="open">Open</TabsTrigger>
@@ -559,7 +601,7 @@ export default function Cases() {
           <div className="flex justify-between gap-2 border-t pt-4">
             <div>
               {role === 'admin' && (
-                <Button variant="destructive" onClick={() => selectedCase && handleDeleteCase(selectedCase.id)}>
+                <Button variant="destructive" onClick={() => selectedCase && handleDeleteCase(selectedCase)}>
                   <Trash2 className="mr-2 h-4 w-4" /> Delete
                 </Button>
               )}

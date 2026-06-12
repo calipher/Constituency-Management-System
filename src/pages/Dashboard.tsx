@@ -271,7 +271,7 @@ export default function Dashboard() {
 
       {/* KPI Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
+        <Card className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => navigate('/citizens')}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Registered Voters</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
@@ -286,7 +286,7 @@ export default function Dashboard() {
             </p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => navigate('/cases')}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Active Cases</CardTitle>
             <Briefcase className="h-4 w-4 text-muted-foreground" />
@@ -301,7 +301,7 @@ export default function Dashboard() {
             </p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => navigate('/projects')}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">CDF Utilization</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
@@ -313,7 +313,7 @@ export default function Dashboard() {
             </p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => navigate('/cases')}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Critical Issues</CardTitle>
             <AlertTriangle className="h-4 w-4 text-rose-500" />
@@ -329,7 +329,7 @@ export default function Dashboard() {
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
         {/* Charts */}
-        <Card className="lg:col-span-4">
+        <Card className="lg:col-span-4 cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => navigate('/cases')}>
           <CardHeader>
             <CardTitle>Case Resolution Trends</CardTitle>
             <CardDescription>New vs Resolved cases over the last 6 months</CardDescription>
@@ -350,7 +350,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="lg:col-span-3">
+        <Card className="lg:col-span-3 cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => navigate('/projects')}>
           <CardHeader>
             <CardTitle>CDF Allocation by Sector</CardTitle>
             <CardDescription>Budget distribution across key sectors</CardDescription>

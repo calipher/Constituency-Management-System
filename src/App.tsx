@@ -10,6 +10,7 @@ import Communications from './pages/Communications';
 import Events from './pages/Events';
 import Documents from './pages/Documents';
 import Users from './pages/Users';
+import AuditLogs from './pages/AuditLogs';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { Button } from './components/ui/button';
@@ -96,6 +97,7 @@ export default function App() {
               <Route path="events" element={<Events />} />
               <Route path="documents" element={<Documents />} />
               <Route path="users" element={<Users />} />
+              <Route path="audit-logs" element={<AuditLogs />} />
             </Route>
           </Routes>
         </Router>
